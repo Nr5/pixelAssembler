@@ -1,1 +1,1 @@
-this is a pixelart animationsoftware bades on assembly language
+this is a pixelart animationsoftware based on assembly language
