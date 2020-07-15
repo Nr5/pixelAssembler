@@ -6,6 +6,7 @@ uniform uvec2 shift;
 uniform uvec2 size;
 uniform uint gif;
 in vec2 texCoordf;
+uniform uint transparent_index;
 void main(){
 	
 	float light=.1;
@@ -16,7 +17,7 @@ void main(){
 	
 	
 	int colindex =int((texcol.r*256));
-	if (colindex==0)
+	if (colindex==transparent_index)
 		gl_FragColor=vec4(0);
 	else{
 		uint col=palette[colindex];
