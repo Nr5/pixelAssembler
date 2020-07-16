@@ -25,6 +25,8 @@ uint16_t frame_count ;
 uint16_t width 		= 128;
 uint16_t height 	= 128;
 float 	 scale 		= 1.f;
+uint8_t  scale_gif = 1;
+
 
 uint8_t  rendergif 		= 0;
 uint8_t  *gif_palette 	= 0;
@@ -33,6 +35,10 @@ uint32_t colortable 	= 0;
 char     image_name_buffer[65535];
 char*    image_name_pointers[128];
 uint16_t image_name_buffer_length;
+
+
+uint8_t framerate = 24;
+uint8_t framerate_changed = 0;
 
 char     name_buf2[65535];
 ge_GIF * gif;
@@ -121,12 +127,9 @@ void setimage (layer* this,short arg1,short arg2){
 	}
 }
 
-
-
 void drawinstr (layer* this,short arg1,short arg2){
 	//setimage (this,this->registers[63],0);
 	this->wait=arg1;
-	
 }
 
 void compare (layer* this,short arg1,short arg2){
@@ -199,6 +202,36 @@ layer layers[16];
 char path_to_res[0];
 char* path_from_res;
 
+static void load_images_func_helper(const char* name,gpointer _){
+	printf("image_name: %s\n",name);
+	SDL_Surface* img=SDL_LoadBMP(name);
+	
+	uint8_t name_length = strlen(name) + 1;
+	memcpy(image_name_buffer+image_name_buffer_length, name,name_length);
+	image_name_pointers[n_images] = image_name_buffer_length;
+	image_name_buffer_length += name_length;
+	
+
+	for (const char* name2; name2 = strstr(name,"/"); name = name2+1);
+	
+	char* tmpname=	strstr(name,".");
+	tmpname[0]=0;
+	VarMapPair vmp={name,n_images};
+		
+	var_map[var_map_size++]=vmp;
+	
+	images[n_images++]=img;
+	printf("vmp: %s,%i\n"  ,vmp.key,vmp.val);
+	printf("var_map_size: %i\n",var_map_size);
+	printf("n_images: %i\n",n_images);
+	
+	GtkWidget* label= gtk_label_new(name);
+	gtk_label_set_xalign (label, 0);
+	gtk_container_add(GTK_CONTAINER(imglist_widget), label);
+	//tmpname[0]=".";
+    
+}
+
 int (*getFunc(const char* name))(layer*,short, short) {
 	for (int i=0;i<instr_map_size;i++){
 		if (!strcmp(instr_map[i].key ,name)){
@@ -212,7 +245,7 @@ static void pause_func(GtkWidget *bt, gpointer ud){
 		paused=!paused;
 		
 }
-static void load_images_func_helper(const char* name,gpointer _);
+
 static void load_func(GtkWidget *bt, gpointer ud){
 	
 			GtkWidget *dialog;
@@ -310,36 +343,6 @@ if (res == GTK_RESPONSE_ACCEPT)
   }
 	gtk_widget_destroy (dialog);
 		
-}
-
-static void load_images_func_helper(const char* name,gpointer _){
-	printf("image_name: %s\n",name);
-	SDL_Surface* img=SDL_LoadBMP(name);
-	
-	uint8_t name_length = strlen(name) + 1;
-	memcpy(image_name_buffer+image_name_buffer_length, name,name_length);
-	image_name_pointers[n_images] = image_name_buffer_length;
-	image_name_buffer_length += name_length;
-	
-
-	for (const char* name2; name2 = strstr(name,"/"); name = name2+1);
-	
-	char* tmpname=	strstr(name,".");
-	tmpname[0]=0;
-	VarMapPair vmp={name,n_images};
-		
-	var_map[var_map_size++]=vmp;
-	
-	images[n_images++]=img;
-	printf("vmp: %s,%i\n"  ,vmp.key,vmp.val);
-	printf("var_map_size: %i\n",var_map_size);
-	printf("n_images: %i\n",n_images);
-	
-	GtkWidget* label= gtk_label_new(name);
-	gtk_label_set_xalign (label, 0);
-	gtk_container_add(GTK_CONTAINER(imglist_widget), label);
-	//tmpname[0]=".";
-    
 }
 
 static void load_images_func(GtkWidget *bt, gpointer ud){
@@ -487,7 +490,7 @@ static void destroy_the_gl(GtkWidget *wid, gpointer ud) {
 
 static gboolean export_gif(){
 gint res;
-	GtkWidget *label_width, *label_height, *label_frames, *content_area, *details_dialog, *spinner_x, *spinner_y, *spinner_f,  *ok_button, *grid;
+	GtkWidget *label_scale, *label_frames, *content_area, *details_dialog, *spinner_scale, *spinner_f,  *ok_button, *grid;
 	details_dialog = gtk_dialog_new_with_buttons("export gif",0 ,0 , 
 				  ("_OK"),
                   GTK_RESPONSE_ACCEPT,
@@ -497,25 +500,20 @@ gint res;
 		
 		
 		
-	label_width  = gtk_label_new("width:  			");
-	label_height = gtk_label_new("height: 			");
+	label_scale  = gtk_label_new("scale:  			");
 	label_frames = gtk_label_new("number of frames: ");
 		
-	spinner_x = gtk_spin_button_new_with_range(0,65535,1);
-	spinner_y = gtk_spin_button_new_with_range(0,65535,1);
-	ok_button = gtk_button_new_with_label("Ok");
-	spinner_f = gtk_spin_button_new_with_range(0,65535,1);
+	spinner_scale = gtk_spin_button_new_with_range(1,0xFF,1);
+	spinner_f = gtk_spin_button_new_with_range(0,0xFFFF,1);
 	grid      = gtk_grid_new();
 		
 	content_area = gtk_dialog_get_content_area (details_dialog);
 		
-	gtk_grid_attach(GTK_GRID(grid), label_width  ,   0,  0, 1, 1);
-	gtk_grid_attach(GTK_GRID(grid), label_height ,   0,  1, 1, 1);
-	gtk_grid_attach(GTK_GRID(grid), label_frames ,   0,  2, 1, 1);
+	gtk_grid_attach(GTK_GRID(grid), label_scale  ,   0,  0, 1, 1);
+	gtk_grid_attach(GTK_GRID(grid), label_frames ,   0,  1, 1, 1);
 	
-	gtk_grid_attach(GTK_GRID(grid), spinner_x,   1,  0, 1, 1);
-	gtk_grid_attach(GTK_GRID(grid), spinner_y,   1,  1, 1, 1);
-	gtk_grid_attach(GTK_GRID(grid), spinner_f,   1,  2, 1, 1);
+	gtk_grid_attach(GTK_GRID(grid), spinner_scale,   1,  0, 1, 1);
+	gtk_grid_attach(GTK_GRID(grid), spinner_f,   	 1,  1, 1, 1);
 	
 	gtk_container_add(GTK_CONTAINER(content_area),grid);
 	
@@ -524,9 +522,11 @@ gint res;
 	res = gtk_dialog_run (GTK_DIALOG (details_dialog));
 	
 	if (res != GTK_RESPONSE_ACCEPT) return;
-	
-	width_gif    = gtk_spin_button_get_value_as_int(spinner_x);
-	height_gif   = gtk_spin_button_get_value_as_int(spinner_y);
+
+
+	uint8_t scale = gtk_spin_button_get_value_as_int(spinner_scale);
+	width_gif    = scale * width; 
+	height_gif   = scale * height; 
 	frame_count  = gtk_spin_button_get_value_as_int(spinner_f);
 
 
@@ -578,14 +578,17 @@ static gboolean on_clicked(GtkWidget *wid, GdkEvent *ev, gpointer user_data) {
 
 gboolean draw_the_gl(gpointer ud) {
 	if (paused) return TRUE; 
-    static float s = 0.f;
+	if (framerate_changed){
+		g_timeout_add_full(1000, 1000.f / framerate	, draw_the_gl, 0, 0);
+    	framerate_changed = 0;
+		return FALSE;
+	}
+	
+	static float s = 0.f;
     GtkWidget *gl = g_gl_wid;
     GdkWindow *wnd;
     te_gtkgl_make_current(TE_GTKGL(gl));
-	glClearColor(0, 0, 0, 1.0);
-    glClear(GL_COLOR_BUFFER_BIT);
-   	
-
+	
 	glUseProgram(shader);
 	if (!do_the_gl)
         return FALSE;
@@ -597,14 +600,17 @@ gboolean draw_the_gl(gpointer ud) {
 			glViewport(0, 0, width_gif, height_gif);
 		}else{
 			glViewport(
-					gtk_widget_get_allocated_width(gl)  / 2 - width  * scale / 2, 
+					gtk_widget_get_allocated_width (gl) / 2 - width  * scale / 2, 
 					gtk_widget_get_allocated_height(gl) / 2 - height * scale / 2, 
-					width * scale,
+					width  * scale,
 				   	height * scale
 			  );
 	
 		}
 	
+    	glClearColor(0, 0, 0, 1.0);
+    	glClear(GL_COLOR_BUFFER_BIT);
+   	
 		glEnable(GL_TEXTURE_RECTANGLE_ARB);	
 		glDisable(GL_DEPTH_TEST);
 		glEnable(GL_BLEND);
@@ -674,8 +680,6 @@ gboolean draw_the_gl(gpointer ud) {
 			glEnd();	
 		
 	
-		// this is also very important
-		
 	}
 	
 	uint8_t pixels[width_gif * height_gif];
@@ -687,7 +691,11 @@ gboolean draw_the_gl(gpointer ud) {
 		if(framenr < frame_count - 1){
 			
 			for (int row=0; row < height_gif; row++){
-				memcpy(gif->frame+row*width_gif, pixels+width_gif*height_gif - (row+1)*width_gif, width_gif);
+				memcpy(
+						gif->frame+row*width_gif, 
+						pixels+width_gif*height_gif - (row+1)*width_gif,
+					   	width_gif
+					);
 			}
 		}
 		
@@ -700,7 +708,7 @@ gboolean draw_the_gl(gpointer ud) {
 		}
 		
 		if(framenr < frame_count - 1){
-			ge_add_frame(gif, 4);
+			ge_add_frame(gif, 100.f/framerate);
 		}
 		
 	}
@@ -713,9 +721,7 @@ gboolean draw_the_gl(gpointer ud) {
 	glDisable(GL_TEXTURE_RECTANGLE_ARB);	
 	glDisable(GL_TEXTURE_2D);
 	glDisable(GL_DEPTH_TEST);
-	//glDisable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	//glLoadIdentity();
 	
 	glViewport(
 			gtk_widget_get_allocated_width(gl)  / 2 - width  * scale / 2 -1, 
@@ -1027,6 +1033,11 @@ void spinner_value_changed(GtkWidget *spinner, gpointer ud){
 	*((uint16_t*)ud) = gtk_spin_button_get_value_as_int(spinner);
 }
 
+void framerate_change_func(GtkWidget *spinner, gpointer ud){
+	framerate = gtk_spin_button_get_value_as_int(spinner);
+	framerate_changed = 1;
+}
+
 static gboolean select_transparent_color(GtkWidget *wid, GdkEvent *ev, gpointer user_data) {
 	transparent_color_index = (uint8_t) user_data;
 	glUniform1ui( glGetUniformLocation(shader,"transparent_index") ,(uint8_t) user_data);
@@ -1047,8 +1058,8 @@ int main(int argc, char *argv[]) {
 			  *cnt, *grid_down, *grid_buttons,
 			  *gl, 
 			  *bt1,*bt2,*bt3,*bt4,*bt5,*bt6,
-			  *label_width, *label_height,
-			  *spinner_x, *spinner_y,
+			  *label_width, *label_height, *label_framerate,
+			  *spinner_x, *spinner_y, *spinner_framerate,
 			  *view1,*view2,*view3
 			  ;
     
@@ -1072,13 +1083,16 @@ int main(int argc, char *argv[]) {
 	
 	label_width  = gtk_label_new("width:");
 	label_height = gtk_label_new("height:");
-    
+    label_framerate = gtk_label_new("fps:");
+
 	spinner_x = gtk_spin_button_new_with_range(0,65535,1);
 	spinner_y = gtk_spin_button_new_with_range(0,65535,1);
+	spinner_framerate = gtk_spin_button_new_with_range(0,255,1);
 	
 	g_signal_connect(G_OBJECT(spinner_x), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)&width);
 	g_signal_connect(G_OBJECT(spinner_y), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)&height);
 	
+	g_signal_connect(G_OBJECT(spinner_framerate), "value_changed", G_CALLBACK(framerate_change_func), (gpointer)&height);
 	
 	g_signal_connect(G_OBJECT(bt1), "clicked", G_CALLBACK(refresh), (gpointer)&cnt);
 	g_signal_connect(G_OBJECT(bt2), "clicked", G_CALLBACK(pause_func), (gpointer)&cnt);
@@ -1150,11 +1164,17 @@ int main(int argc, char *argv[]) {
   	gtk_grid_attach(GTK_GRID(grid_buttons), label_height,   0,  4, 1, 1);
   	gtk_grid_attach(GTK_GRID(grid_buttons), spinner_y,      1,  4, 1, 1);
     
+  	gtk_grid_attach(GTK_GRID(grid_buttons), label_framerate,   0,  5, 1, 1);
+  	gtk_grid_attach(GTK_GRID(grid_buttons), spinner_framerate, 1,  5, 1, 1);
+
 
 
 	gtk_grid_attach(GTK_GRID(cnt), grid_buttons,   2,  1, 1, 1);
 	GtkWidget* frames[8];
 	GtkWidget* scrollpanes[9];
+
+
+
 
 	for (uint8_t i;i<8;i++){
 		char namebuffer[8]="Layer__";
@@ -1178,10 +1198,7 @@ int main(int argc, char *argv[]) {
 	
 	gtk_grid_attach(GTK_GRID(cnt),grid_down,0,2,3,1);
 
-	// create the window and set it to quit application when closed
-    
 	
-    // create menu
 	scrollpanes[8] = gtk_scrolled_window_new(NULL, NULL);
 	gtk_widget_set_size_request(scrollpanes[8], 140, 400);
 		
@@ -1193,19 +1210,10 @@ int main(int argc, char *argv[]) {
 	
 	gtk_grid_attach(GTK_GRID(cnt), scrollpanes[8],   1,  0, 1, 2);
 	
-	
-	
-	
-    // bureaucracy and show things on screen
-	
 	//gtk_container_add(GTK_CONTAINER(win),GTK_CONTAINER(menubar) );
     gtk_container_add(GTK_CONTAINER(win), cnt);
     gtk_widget_set_size_request(gl, 1024, 512);
     
-	
-	
-	
-	
 	
 	gtk_widget_show_all(win);
 	g_timeout_add_full(1000, 10, draw_the_gl, 0, 0);
@@ -1217,15 +1225,10 @@ int main(int argc, char *argv[]) {
 		
 
 	glUseProgram(shader);
-/*
-	glUniform1uiv( glGetUniformLocation(shader,"palette") ,16,
-	   colortable
-	);
-*/		
-	
 	
 	gtk_main();
     return 0;
-	
+
+
 }
 
