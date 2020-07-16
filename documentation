@@ -1,0 +1,43 @@
+
+
+
+
+
+
+
+
+Layers
+	there are a maximum of eight layers, 
+	the first layer is drawn first and therefore most in the back
+
+
+Commands
+	for the following commands if an argument is prefixed by '$' 
+	the value inside the specified register	is taken the value after '$' must be a number
+	
+	// Label
+	.label 		 set a label, can be any string prefixed by "."
+	
+	// Manipulating registers
+	set a b 	 set register a to b
+	add a b 	 add b to register a
+	cmp a b 	 compare a and b used for following conditional jump instruction
+	
+	drw f 		 draw current image for f frames 		 
+	img i 		 set current image to i  can be an index or a string  look add image list
+	
+	
+	// Jump instruction
+	jmp .label   jump unconditionally to a line. 
+				 the argument can be a line number or a defined label prefixed with '.'
+	
+	jeq .label	 jump if last cmp compared two equal values
+	jgt .label   jump if in last cmp the first value was larger than the second one
+	jlt .label   jump if in last cmp the first value was less than the second one
+	jge .label   jump if in last cmp the first value was larger than or equal to the second one
+	jle .label   jump if in last cmp the first value was less than or equal to the second one
+
+	// Move and shift images	
+	mvt 		 move image to x,y    // not yet implemented
+	mov x y 	 move image by x,y pixels
+	shf x y 	 shift the pixels of the current image by x,y loops pixels 
