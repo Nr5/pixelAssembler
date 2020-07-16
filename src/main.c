@@ -594,7 +594,7 @@ gboolean draw_the_gl(gpointer ud) {
         return FALSE;
 
 
-    for (int i=0;i<1+frame_count * rendergif;i++){
+    for (int i=0; i < 1 +  (frame_count-1) * rendergif; i++){
 		
 		if(rendergif){
 			glViewport(0, 0, width_gif, height_gif);
@@ -678,40 +678,38 @@ gboolean draw_the_gl(gpointer ud) {
 				x, y+h,
 				0, 0+h);
 			glEnd();	
-		
 	
-	}
+		}
 	
-	uint8_t pixels[width_gif * height_gif];
-
-	glReadPixels(0, 0, width_gif, height_gif, GL_RED, GL_UNSIGNED_BYTE, pixels);
+		if (layers[0].img && gif && rendergif){
 	
-	if (layers[0].img && gif && rendergif){
-		
-		if(framenr < frame_count - 1){
-			
-			for (int row=0; row < height_gif; row++){
-				memcpy(
-						gif->frame+row*width_gif, 
-						pixels+width_gif*height_gif - (row+1)*width_gif,
-					   	width_gif
+			uint8_t pixels[width_gif * height_gif];
+			glReadPixels(0, 0, width_gif, height_gif, GL_RED, GL_UNSIGNED_BYTE, pixels);
+	
+			if(framenr < frame_count +1){
+				
+				for (int row=0; row < height_gif; row++){
+					memcpy(
+							gif->frame+row*width_gif, 
+							pixels+width_gif*height_gif - (row+1)*width_gif,
+						   	width_gif
 					);
+				}
 			}
+		
+			framenr++;
+		
+			if (framenr == frame_count +1){
+				ge_close_gif(gif);
+				gif=0;
+				rendergif=0;
+			}
+		
+			if(framenr < frame_count +1){
+				ge_add_frame(gif, 100.f/framerate);
+			}
+		
 		}
-		
-		framenr++;
-		
-		if (framenr == frame_count - 1){
-			ge_close_gif(gif);
-			gif=0;
-			rendergif=0;
-		}
-		
-		if(framenr < frame_count - 1){
-			ge_add_frame(gif, 100.f/framerate);
-		}
-		
-	}
 	}
 	
 	
@@ -780,8 +778,6 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 		GtkTextIter end_iter;
 		
 		GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textViews[i]));
-		
-		
 		
 		
 		gtk_text_buffer_get_start_iter(buffer, &start_iter);
