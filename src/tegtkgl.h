@@ -53,7 +53,7 @@ void te_gtkgl_make_current(TeGtkgl*);
 void te_gtkgl_swap(TeGtkgl*);
 static unsigned int loadTexture(const char* filename);
 static unsigned int createShader();
-static unsigned int compileShader(unsigned int type, char* src);
+static unsigned int compileShader(unsigned int type,const char* src);
 
 G_END_DECLS
 

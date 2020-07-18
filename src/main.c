@@ -5,6 +5,7 @@
 //#include <gtksourceview/gtksourceview.h>
 #include <gdk/gdk.h>
 #include "tegtkgl.h"
+//#include <GL/glew.h>
 #include <GL/gl.h>
 #include <math.h>
 #include <SDL/SDL.h>
@@ -29,12 +30,12 @@ uint16_t height 	= 128;
 float 	 scale 		= 1.f;
 uint8_t  scale_gif  = 1;
 
-uint8_t  rendergif 		= 0;
-uint8_t  *gif_palette 	= 0;
-uint32_t colortable 	= 0;
+uint8_t   rendergif 	= 0;
+uint8_t   *gif_palette 	= 0;
+uint32_t* colortable 	= 0;
 
 char     image_name_buffer[65536];
-char*    image_name_pointers[128];
+//char*    image_name_pointers[256];
 uint16_t image_name_buffer_length;
 
 uint8_t framerate = 24;
@@ -57,9 +58,12 @@ GtkWidget* imglist_widget;
 
 uint8_t transparent_color_index;   
 static unsigned int shader;
-unsigned char time_0=0;
-char paused = 0;
-char p2=1;
+unsigned char time_0 = 0;
+char paused 		 = 0;
+char p2 			 = 1;
+
+char path_to_res[64];
+char* path_from_res;
 
 /*-------------
   ** Logic ** 
@@ -81,11 +85,11 @@ typedef struct px_image{
 	uint8_t* pixels;	
 } px_image;
 
-px_image images[128];
+px_image images[256];
 
-uint8_t n_layers=0;
-uint8_t n_images=0;
-int16_t  compval=0;
+uint8_t n_layers = 0;
+uint8_t n_images = 0;
+int16_t  compval = 0;
 
 typedef struct layer layer;
 
@@ -103,9 +107,9 @@ typedef struct VarMapPair{
 	int16_t val;
 }VarMapPair;
 
-uint16_t framenr=0;
+uint16_t framenr      = 0;
 VarMapPair var_map[256];
-var_map_size=0;
+uint8_t  var_map_size = 0;
 
 struct layer{
 	//layerlist* list;
@@ -215,8 +219,6 @@ MapPair instr_map[]={
 uint8_t instr_map_size=sizeof(instr_map)/sizeof(instr_map[0]);
 
 layer layers[16];
-char path_to_res[0];
-char* path_from_res;
 
 static void load_images_func_helper(const char* name,gpointer _){
 	printf("image_name: %s\n",name);
@@ -224,7 +226,7 @@ static void load_images_func_helper(const char* name,gpointer _){
 	
 	uint8_t name_length = strlen(name) + 1;
 	memcpy(image_name_buffer+image_name_buffer_length, name,name_length);
-	image_name_pointers[n_images] = image_name_buffer_length;
+	//image_name_pointers[n_images] = image_name_buffer_length;
 	image_name_buffer_length += name_length;
 	
 	for (const char* name2; name2 = strstr(name,"/"); name = name2+1);
@@ -251,13 +253,13 @@ static void load_images_func_helper(const char* name,gpointer _){
 	printf("n_images: %i\n",     n_images);
 		
 	GtkWidget* label= gtk_label_new(name);
-	gtk_label_set_xalign (label, 0);
+	gtk_label_set_xalign (GTK_LABEL(label), 0);
 	gtk_container_add(GTK_CONTAINER(imglist_widget), label);
 	//tmpname[0]=".";
 			
 }
-
-int (*getFunc(const char* name))(layer*,short, short) {
+ 
+void (*getFunc(const char* name))(layer*, int16_t, int16_t) {
 	for (int i=0;i<instr_map_size;i++){
 		if (!strcmp(instr_map[i].key ,name)){
 			return instr_map[i].val;
@@ -278,7 +280,7 @@ static void load_func(GtkWidget *bt, gpointer ud){
 	gint res;
 
 	dialog = gtk_file_chooser_dialog_new ("Open File",
-    	                                  win,
+    	                                  GTK_WINDOW(win),
         	                              action,
             	                          "Cancel",
                 	                      GTK_RESPONSE_CANCEL,
@@ -289,6 +291,12 @@ static void load_func(GtkWidget *bt, gpointer ud){
 	GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
     
 	gtk_file_chooser_set_current_folder (chooser, path_to_res);
+	
+	GtkFileFilter * filter =gtk_file_filter_new ();
+	gtk_file_filter_add_pattern (filter,"*.pxa");
+	gtk_file_filter_set_name (filter,".pxa files ");
+	gtk_file_chooser_add_filter (chooser, filter);
+	
 	res = gtk_dialog_run (GTK_DIALOG (dialog));
 	if (res == GTK_RESPONSE_ACCEPT)  	{
     	const char*  filename = gtk_file_chooser_get_filename (chooser);
@@ -300,15 +308,14 @@ static void load_func(GtkWidget *bt, gpointer ud){
 		for (uint8_t i=0;i<8;i++){
 			printf("size:%i\n",header[i]);
 	
-			const char* strbuf = malloc(header[i]); 
+			char* strbuf = malloc(header[i]); 
 			fread (strbuf,1,header[i],fp);
 		
 		
 			GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textViews[i]));
-			gtk_text_buffer_set_text (buffer,
-            strbuf,
-            header[i]);
-		    free (strbuf);
+			gtk_text_buffer_set_text ( buffer, strbuf, header[i] );
+			
+			free (strbuf);
 		}
 //  TODO the end of this function is really messy tidy up
 		name_buf2[0]=0;
@@ -335,6 +342,8 @@ static void load_func(GtkWidget *bt, gpointer ud){
 		}
 // TODO this code is a copy from load_images_func() 
 // probably needs some refactoring
+		printf("n_images: %i\n", n_images);
+		
 		if(!colortable && n_images){
 			colortable=((uint32_t*)images[0].palette);
 		
@@ -349,20 +358,21 @@ static void load_func(GtkWidget *bt, gpointer ud){
 				gif_palette[i*3+1]=images[0].palette[i].g;
 				gif_palette[i*3+2]=images[0].palette[i].b;
 			
-				GdkColor color= {0,
-					images[0].palette[i].r*256,
-					images[0].palette[i].g*256,
-					images[0].palette[i].b*256
+				GdkRGBA color= {
+					images[0].palette[i].r / 255.f,
+					images[0].palette[i].g / 255.f,
+					images[0].palette[i].b / 255.f,
+									255	   / 255.f
 				};
 			
-				gtk_widget_modify_bg ( colorbuttons[i], GTK_STATE_NORMAL, &color);
+				gtk_widget_override_background_color ( colorbuttons[i], 0, &color);
 			}
 		}
 	
 		gtk_widget_show_all(imglist_widget);
 
 		fclose(fp);	
-		g_free (filename);
+		g_free ((gpointer)filename);
 	}
 
 	gtk_widget_destroy (dialog);
@@ -375,8 +385,8 @@ static void load_images_func(GtkWidget *bt, gpointer ud){
 	gint res;
 
 	dialog = gtk_file_chooser_dialog_new ("Open Files",
-											win,
-											action,
+    	                              		GTK_WINDOW(win),
+									  		action,
 											"Cancel",
 											GTK_RESPONSE_CANCEL,
 											"Open",
@@ -400,7 +410,7 @@ static void load_images_func(GtkWidget *bt, gpointer ud){
 		
 		
 		g_slist_foreach (filelist,
-					load_images_func_helper,
+				    (GFunc)	load_images_func_helper,
 					0);
 		
 		
@@ -431,12 +441,14 @@ static void load_images_func(GtkWidget *bt, gpointer ud){
 			gif_palette[i*3+1]=images[0].palette[i].g;
 			gif_palette[i*3+2]=images[0].palette[i].b;
 			
-			GdkColor color= {0,
-					images[0].palette[i].r*257,
-					images[0].palette[i].g*257,
-					images[0].palette[i].b*257
+			GdkColor color= {
+					0 ,
+					images[0].palette[i].r * 0x01010,
+					images[0].palette[i].g * 0x01010,
+					images[0].palette[i].b * 0x01010,
 			};
-			gtk_widget_modify_bg ( colorbuttons[i], GTK_STATE_NORMAL, &color);
+			
+			gtk_widget_modify_bg ( colorbuttons[i], 0, &color);
 		}
 	}
 
@@ -449,7 +461,7 @@ static void save_func(GtkWidget *bt, gpointer ud){
 	gint res;
 
 	dialog = gtk_file_chooser_dialog_new ("Save File",
-                                      win,
+    	                              GTK_WINDOW(win),
                                       action,
                                       "Cancel",
                                       GTK_RESPONSE_CANCEL,
@@ -457,12 +469,21 @@ static void save_func(GtkWidget *bt, gpointer ud){
                                       GTK_RESPONSE_ACCEPT,
                                       NULL);
 
+	
+	GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
+			
+	gtk_file_chooser_set_current_folder (chooser, path_to_res);
+
+	GtkFileFilter * filter =gtk_file_filter_new ();
+	gtk_file_filter_add_pattern (filter,"*.pxa");
+	gtk_file_filter_set_name (filter,".pxa files ");
+	gtk_file_chooser_add_filter (chooser, filter);
+	
+	gtk_file_chooser_set_current_folder (chooser, path_to_res);
+	
 	res = gtk_dialog_run (GTK_DIALOG (dialog));
 	if (res == GTK_RESPONSE_ACCEPT)  {
 			char *filename;
-			GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
-			
-			gtk_file_chooser_set_current_folder (chooser, path_to_res);
 			filename = gtk_file_chooser_get_filename (chooser);
 			
 			uint16_t header[8];
@@ -501,7 +522,7 @@ static void save_func(GtkWidget *bt, gpointer ud){
 			
 			fclose(fp);	
 			
-			g_free (filename);
+			g_free ((gpointer)filename);
   	}
 	gtk_widget_destroy (dialog);
 		
@@ -512,14 +533,16 @@ static void import_gif( GtkWidget *bt, gpointer ud ) {
 	GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_OPEN;
 	gint res;
 
-	dialog = gtk_file_chooser_dialog_new ("Open File",
-    	                                  win,
-        	                              action,
-            	                          "Cancel",
-                	                      GTK_RESPONSE_CANCEL,
-                    	                  "Open",
-                        	              GTK_RESPONSE_ACCEPT,
-                            	          NULL);
+	dialog = gtk_file_chooser_dialog_new (
+											"Open File",
+    	                                  	GTK_WINDOW(win),
+        	                              	action,
+            	                          	"Cancel",
+                	                      	GTK_RESPONSE_CANCEL,
+                    	                  	"Open",
+                        	              	GTK_RESPONSE_ACCEPT,
+                            	          	NULL
+										 );
 
 	GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
     
@@ -542,19 +565,17 @@ static void import_gif( GtkWidget *bt, gpointer ud ) {
 	
 	
 	char* name = name_buf2;
-	for (const char* name2; name2 = strstr(name,"/"); name = name2+1);
+	
+	for (char* name2; name2 = strstr(name,"/"); name = name2+1);
+	
 	strstr(name,".")[0] = 0;
-	
-		
-	
-	//SDL_Surface* img;
 	
 	uint8_t name_length = strlen(name) + 1;
 	memcpy(image_name_buffer+image_name_buffer_length, name,name_length);
-	image_name_pointers[n_images] = image_name_buffer_length;
+	
 	image_name_buffer_length += name_length;
 	
-	for (const char* name2; name2 = strstr(name,"/"); name = name2+1);
+	for (char* name2; name2 = strstr(name,"/"); name = name2+1);
 			
 	char* numbered_name_buffer;	
 	int i = 0;
@@ -578,7 +599,7 @@ static void import_gif( GtkWidget *bt, gpointer ud ) {
 		GtkWidget* label= gtk_label_new(numbered_name_buffer);
 		
 		printf("1\n");
-		gtk_label_set_xalign (label, 0);
+		gtk_label_set_xalign (GTK_LABEL(label), 0);
 		printf("2\n");
 		gtk_container_add(GTK_CONTAINER(imglist_widget), label);
 		
@@ -619,12 +640,13 @@ static void import_gif( GtkWidget *bt, gpointer ud ) {
 			gif_palette[i*3+1]=images[0].palette[i].g;
 			gif_palette[i*3+2]=images[0].palette[i].b;
 			
-			GdkColor color= {0,
-					images[0].palette[i].r*257,
-					images[0].palette[i].g*257,
-					images[0].palette[i].b*257
+			GdkRGBA color= {
+					images[0].palette[i].r / 255.f,
+					images[0].palette[i].g / 255.f,
+					images[0].palette[i].b / 255.f,
+									255	   / 255.f
 			};
-			gtk_widget_modify_bg ( colorbuttons[i], GTK_STATE_NORMAL, &color);
+			gtk_widget_override_background_color ( colorbuttons[i], 0, &color);
 		}
 	}
 	
@@ -653,7 +675,7 @@ jmp .l0\n"
 	//free (strbuf);
 	
 	
-	g_free (filename);
+	g_free ((gpointer)filename);
 	gtk_widget_destroy (dialog);
 		
 	gtk_widget_show_all(win);
@@ -681,11 +703,11 @@ static gboolean export_gif(){
 	label_scale  = gtk_label_new("scale:  			");
 	label_frames = gtk_label_new("number of frames: ");
 		
-	spinner_scale = gtk_spin_button_new_with_range(1,0xFF,1);
-	spinner_f = gtk_spin_button_new_with_range(0,0xFFFF,1);
-	grid      = gtk_grid_new();
+	spinner_scale 	= gtk_spin_button_new_with_range(1,0xFF,1);
+	spinner_f 		= gtk_spin_button_new_with_range(1,0xFFFF,1);
+	grid      		= gtk_grid_new();
 		
-	content_area = gtk_dialog_get_content_area (details_dialog);
+	content_area = gtk_dialog_get_content_area (GTK_DIALOG(details_dialog));
 		
 	gtk_grid_attach(GTK_GRID(grid), label_scale  ,   0,  0, 1, 1);
 	gtk_grid_attach(GTK_GRID(grid), label_frames ,   0,  1, 1, 1);
@@ -699,20 +721,20 @@ static gboolean export_gif(){
 	
 	res = gtk_dialog_run (GTK_DIALOG (details_dialog));
 	
-	if (res != GTK_RESPONSE_ACCEPT) return;
+	if (res != GTK_RESPONSE_ACCEPT) return FALSE;
 
 
-	uint8_t scale = gtk_spin_button_get_value_as_int(spinner_scale);
+	uint8_t scale = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spinner_scale));
 	width_gif    = scale * width; 
 	height_gif   = scale * height; 
-	frame_count  = gtk_spin_button_get_value_as_int(spinner_f);
+	frame_count  = gtk_spin_button_get_value_as_int( GTK_SPIN_BUTTON(spinner_f));
 
 
 	GtkWidget *dialog;
 	GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SAVE;
 
 	dialog = gtk_file_chooser_dialog_new ("Save File",
-                                      win,
+                                      GTK_WINDOW(win),
                                       action,
                                       "Cancel",
                                       GTK_RESPONSE_CANCEL,
@@ -720,10 +742,18 @@ static gboolean export_gif(){
                                       GTK_RESPONSE_ACCEPT,
                                       NULL);
 
+   	GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
+	
+	gtk_file_chooser_set_current_folder (chooser, path_to_res);
+	
+	GtkFileFilter * filter =gtk_file_filter_new ();
+	gtk_file_filter_add_pattern (filter,"*.gif");
+	gtk_file_filter_set_name (filter,".gif files ");
+	gtk_file_chooser_add_filter (chooser, filter);
+	
 	res = gtk_dialog_run (GTK_DIALOG (dialog));
 	if (res == GTK_RESPONSE_ACCEPT){
     	char *filename;
-    	GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
 	
 		gtk_file_chooser_set_current_folder (chooser,  path_to_res);
     	filename = gtk_file_chooser_get_filename (chooser);
@@ -737,11 +767,11 @@ static gboolean export_gif(){
          	0              
     	);
 	
-		g_free (filename);
+		g_free ((gpointer)filename);
   	}
 	gtk_widget_destroy (dialog);
 	gtk_widget_destroy (details_dialog);
-	
+	return TRUE;
 }
 
 static gboolean on_clicked(GtkWidget *wid, GdkEvent *ev, gpointer user_data) {
@@ -761,8 +791,6 @@ gboolean draw_the_gl(gpointer ud) {
 		return FALSE;
 	}
 		
-	
-	static float s = 0.f;
     GtkWidget *gl = g_gl_wid;
     GdkWindow *wnd;
     te_gtkgl_make_current(TE_GTKGL(gl));
@@ -1102,10 +1130,10 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 	printf("var_map_size: %i\n",var_map_size);
 }
 
-static unsigned int compileShader(unsigned int type, char* src){
+static unsigned int compileShader(unsigned int type,const char* src){
 	unsigned int id= glCreateShader(type);
 	
-	glShaderSource(id,1,&src,0);
+	glShaderSource(id,1, &src,0);
 	glCompileShader(id);
 
 	int result;
@@ -1146,7 +1174,9 @@ gboolean zoom (GtkWidget *bt, GdkEvent  *event, gpointer ud) {
 }
 
 static unsigned int createShader(){
+	printf("teshader\n");
 	unsigned int program = glCreateProgram();
+	printf("teshader\n");
 	printf("%d\n",program);
 	char* vs;
 	char* fs;
@@ -1200,21 +1230,26 @@ static unsigned int createShader(){
 }
 
 void spinner_value_changed(GtkWidget *spinner, gpointer ud){
-	*((uint16_t*)ud) = gtk_spin_button_get_value_as_int(spinner);
+	*((uint16_t*)ud) = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spinner));
 }
 
 void framerate_change_func(GtkWidget *spinner, gpointer ud){
-	framerate = gtk_spin_button_get_value_as_int(spinner);
+	framerate = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spinner));
 	framerate_changed = 1;
 }
 
-static gboolean select_transparent_color(GtkWidget *wid, GdkEvent *ev, gpointer user_data) {
-	transparent_color_index = (uint8_t) user_data;
-	glUniform1ui( glGetUniformLocation(shader,"transparent_index") ,(uint8_t) user_data);
+static gboolean select_transparent_color(GtkWidget* w, GdkEvent* e, gpointer user_data) {
+	printf("stc  %i  \n",(uint8_t) user_data ); transparent_color_index =(uint8_t) (uint64_t) user_data;
+	glUniform1ui( glGetUniformLocation(shader,"transparent_index") ,(uint8_t) (uint64_t) user_data);
 	return 1;
 }
 
 int main(int argc, char *argv[]) {
+	//if (glewInit() ){
+//		printf("glew failed\n");
+//		return 1;
+
+//	}	
 	printf("%s\n",  argv[0]); 
 	strcpy(path_to_res,argv[0]);
 	strcpy(path_to_res+strlen(argv[0]) -4, "../res/");
@@ -1222,25 +1257,26 @@ int main(int argc, char *argv[]) {
 	
 	
 	printf("mod:%d\n",(-7%5)+5);
-    GtkWidget *palette_widget, *palette_grid, 
+    GtkWidget *palette_grid, 
 			  *cnt, *grid_down, *grid_buttons,
 			  *gl, 
 			  *bt1,*bt2,*bt3,*bt4,*bt5,*bt6,
 			  *label_width, *label_height, *label_framerate,
 			  *spinner_x, *spinner_y, *spinner_framerate,
-			  *gif_import_button,
-			  *view1,*view2,*view3
+			  *gif_import_button;
 			  ;
     
     gtk_init(&argc, &argv);
-	
 	win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     g_signal_connect(G_OBJECT(win), "destroy", G_CALLBACK(gtk_main_quit), 0);
 
     g_gl_wid = gl = te_gtkgl_new();
 
 
-	palette_widget=gtk_window_new(0);
+    cnt = gtk_grid_new();
+	palette_grid = gtk_grid_new();
+	grid_down = gtk_grid_new();
+	grid_buttons = gtk_grid_new();
 		
 
     bt1 = gtk_button_new_with_label("(>)");
@@ -1260,6 +1296,8 @@ int main(int argc, char *argv[]) {
 
 	gif_import_button = gtk_button_new_with_label("import gif");
 
+	
+	
 	g_signal_connect(G_OBJECT(spinner_x), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)&width);
 	g_signal_connect(G_OBJECT(spinner_y), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)&height);
 	
@@ -1286,37 +1324,38 @@ int main(int argc, char *argv[]) {
     g_signal_connect(G_OBJECT(win), "key_press_event", G_CALLBACK(zoom), (gpointer) 0 );
 
     // our layout
-    cnt = gtk_grid_new();
-	palette_grid = gtk_grid_new();
-	grid_down = gtk_grid_new();
-	grid_buttons = gtk_grid_new();
-
 
 
 	gtk_widget_set_size_request(palette_grid, 140, 140);
     
 	
-	for (int i = 0; i< 256; i++ ){
+	for (uint64_t i = 0; i< 256; i++ ){
 		
 		colorbuttons[i]=gtk_event_box_new();
     	gtk_widget_add_events(colorbuttons[i],  GDK_BUTTON_PRESS_MASK);
 
 			
-	    g_signal_connect(G_OBJECT(colorbuttons[i]), "button-press-event", G_CALLBACK(select_transparent_color),(gpointer)i);
+	    g_signal_connect(
+						G_OBJECT(colorbuttons[i]), 
+						"button-press-event", 
+						G_CALLBACK(select_transparent_color),
+						(gpointer) i
+						);
 			
 		gtk_widget_set_size_request(colorbuttons[i], 16, 16);
 		gtk_grid_attach(GTK_GRID(palette_grid), colorbuttons[i],   i%16,  i/16, 1, 1);
 		
 	}
 	
-	GdkColor color= {0, 65535, 0, 0};	
-	gtk_widget_modify_bg ( colorbuttons[0], GTK_STATE_NORMAL, &color);
+	
+	GdkRGBA color= {65535, 0, 0, 0xffff};	
+	gtk_widget_override_background_color ( colorbuttons[0], 0, &color);
 
-	GdkColor color2={0, 0, 65535, 0};	
-	gtk_widget_modify_bg ( colorbuttons[1], GTK_STATE_NORMAL, &color2);
+	GdkRGBA color2={0, 65535, 0, 0xffff};	
+	gtk_widget_override_background_color ( colorbuttons[1], 0, &color2);
 
-	GdkColor color3={0, 0, 0, 65535};	
-	gtk_widget_modify_bg ( colorbuttons[2], GTK_STATE_NORMAL, &color3);
+	GdkRGBA color3={0, 0, 65535, 0xffff};	
+	gtk_widget_override_background_color ( colorbuttons[2], 0, &color3);
 	
 	gtk_grid_attach(GTK_GRID(cnt), gl,    0,  0, 1, 2);
     gtk_grid_attach(GTK_GRID(cnt), palette_grid,   2,  0, 1, 1);
@@ -1328,9 +1367,9 @@ int main(int argc, char *argv[]) {
 	gtk_grid_attach(GTK_GRID(grid_buttons), bt5,   1,  1, 1, 1);
 	gtk_grid_attach(GTK_GRID(grid_buttons), bt6,   1,  2, 1, 1);
 	
-	gtk_spin_button_set_value(spinner_x,width );
-	gtk_spin_button_set_value(spinner_y,height);
-	gtk_spin_button_set_value(spinner_framerate, framerate);
+	gtk_spin_button_set_value(GTK_SPIN_BUTTON(spinner_x),         width );
+	gtk_spin_button_set_value(GTK_SPIN_BUTTON(spinner_y),         height);
+	gtk_spin_button_set_value(GTK_SPIN_BUTTON(spinner_framerate), framerate);
   	
 	gtk_grid_attach(GTK_GRID(grid_buttons), label_width,    	0,  3, 1, 1);
   	gtk_grid_attach(GTK_GRID(grid_buttons), spinner_x,      	1,  3, 1, 1);
@@ -1348,18 +1387,17 @@ int main(int argc, char *argv[]) {
 	GtkWidget* scrollpanes[9];
 
 
-	for (uint8_t i;i<8;i++){
+	for (uint8_t i = 0;i<8;i++){
 		char namebuffer[8]="Layer__";
 		namebuffer[6]=48+i;
 		frames[i] =gtk_frame_new(namebuffer);
 		scrollpanes[i] = gtk_scrolled_window_new(NULL, NULL);
 		textViews[i] =gtk_text_view_new();
-		
+	
 		gtk_container_add(GTK_CONTAINER(frames[i]),scrollpanes[i]);
 		gtk_container_add(GTK_CONTAINER(scrollpanes[i]),textViews[i]);
 		
 		
-		GtkTextIter iter;
 		gtk_widget_set_size_request(scrollpanes[i], 0, 400);
 		gtk_widget_set_hexpand(scrollpanes[i],1);
 		gtk_widget_set_vexpand(scrollpanes[i],1);
@@ -1367,7 +1405,6 @@ int main(int argc, char *argv[]) {
 		gtk_grid_attach(GTK_GRID(grid_down), frames[i], i,  0, 1, 1);
 			
 	}
-	
 	gtk_grid_attach(GTK_GRID(cnt),grid_down,0,2,3,1);
 
 	
@@ -1384,17 +1421,19 @@ int main(int argc, char *argv[]) {
     gtk_container_add(GTK_CONTAINER(win), cnt);
     gtk_widget_set_size_request(gl, 1024, 512);
     
-	gtk_window_set_icon_from_file(win, "../res/icon.bmp", 0);	
+	gtk_window_set_icon_from_file(GTK_WINDOW(win), "../res/icon.bmp", 0);	
 								//this won't work unless called with the right current path
-	gtk_widget_show_all(win);
-	g_timeout_add_full(1000, 10, draw_the_gl, 0, 0);
+	gtk_widget_show_all(win);	
 	
     te_gtkgl_make_current(TE_GTKGL(gl));
-		glEnable(GL_TEXTURE_RECTANGLE_ARB);
-		shader=createShader();
-		
-
+	
+	shader=createShader();
 	glUseProgram(shader);
+	
+	g_timeout_add_full(1000, 10, draw_the_gl, 0, 0);
+	glEnable(GL_TEXTURE_RECTANGLE_ARB);
+	printf("bla\n");		
+
 	
 	gtk_main();
     return 0;

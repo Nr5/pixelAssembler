@@ -41,3 +41,17 @@ Commands
 	mvt 		 move image to x,y    // not yet implemented
 	mov x y 	 move image by x,y pixels
 	shf x y 	 shift the pixels of the current image by x,y loops pixels 
+
+
+
+pxa file format
+
+		eight times 
+			unsigned 16 bit integer     -- string length of each layer
+
+		eight times
+			variable length utf8 string -- code for each layer
+
+		unsigned  8 bit integer      -- number of images
+		unsigned 16 bit integer      -- length of buffer for image paths
+		variable length utf8 string  -- buffer for image paths
