@@ -15,9 +15,11 @@ Instructions
 	
 
   // Label
+
 	* **. .label  .** 		 set a label, can be any string prefixed by "."
 	
   // Manipulating registers
+
 	* **. set a b .**	 set register a to b
 
 	  
@@ -29,6 +31,7 @@ Instructions
 	
 	
   // Jump instruction
+
 	* **. jmp .label .**   jump unconditionally to a line. 
 				 the argument can be a line number or a defined label prefixed with '.'
 	
@@ -39,6 +42,7 @@ Instructions
 	* **. jle .label .**   jump if in last cmp the first value was less than or equal to the second one
 
   // Move and shift images	
+
 	* **. mvt x y .** 	 move image to x,y   _//_not_yet_implemented_
 	* **. mov x y .** 	 move image by x,y pixels
 	* **. shf x y .**	 shift the pixels of the current image by x,y loops pixels 
