@@ -21,30 +21,36 @@ Instructions
   // Manipulating registers
 
 	* **. set a b .**	 set register a to b
-
-	  
+	
 	* **. add a b .** 	 add b to register a
+	
 	* **. cmp a b .** 	 compare a and b used for following conditional jump instruction
 	
 	* **. drw f   .** 	 draw current image for f frames 		 
+	
 	* **. img i   .**  	 set current image to i  can be an index or a string  look add image list
 	
 	
-  // Jump instruction
+  // Jump instructions
 
 	* **. jmp .label .**   jump unconditionally to a line. 
 				 the argument can be a line number or a defined label prefixed with '.'
-	
 	* **. jeq .label .**  jump if last cmp compared two equal values
+	
 	* **. jgt .label .**  jump if in last cmp the first value was larger than the second one
+	
 	* **. jlt .label .**  jump if in last cmp the first value was less than the second one
+	
 	* **. jge .label .**  jump if in last cmp the first value was larger than or equal to the second one
+	
 	* **. jle .label .**   jump if in last cmp the first value was less than or equal to the second one
 
   // Move and shift images	
 
 	* **. mvt x y .** 	 move image to x,y   _//_not_yet_implemented_
+	
 	* **. mov x y .** 	 move image by x,y pixels
+	
 	* **. shf x y .**	 shift the pixels of the current image by x,y loops pixels 
 
 
