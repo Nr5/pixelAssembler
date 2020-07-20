@@ -4,8 +4,8 @@
 #include <gtk/gtk.h>
 //#include <gtksourceview/gtksourceview.h>
 #include <gdk/gdk.h>
+#include <GL/glew.h>
 #include "tegtkgl.h"
-//#include <GL/glew.h>
 #include <GL/gl.h>
 #include <math.h>
 #include <SDL/SDL.h>
@@ -221,15 +221,13 @@ uint8_t instr_map_size=sizeof(instr_map)/sizeof(instr_map[0]);
 layer layers[16];
 
 static void load_images_func_helper(const char* name,gpointer _){
-	printf("image_name: %s\n",name);
 	SDL_Surface* img=SDL_LoadBMP(name);
 	
 	uint8_t name_length = strlen(name) + 1;
 	memcpy(image_name_buffer+image_name_buffer_length, name,name_length);
-	//image_name_pointers[n_images] = image_name_buffer_length;
 	image_name_buffer_length += name_length;
 	
-	for (const char* name2; name2 = strstr(name,"/"); name = name2+1);
+	for (const char* name2; (name2 = strstr(name,"/")); name = name2+1);
 			
 	char* tmpname = strstr(name,".");
 	tmpname[0]    = 0;
@@ -248,9 +246,6 @@ static void load_images_func_helper(const char* name,gpointer _){
 
 	memcpy(images[n_images++].palette, img->format->palette->colors, img->format->palette->ncolors*4);
 
-	printf("vmp: %s,%i\n",       vmp.key, vmp.val);
-	printf("var_map_size: %i\n", var_map_size    );
-	printf("n_images: %i\n",     n_images);
 		
 	GtkWidget* label= gtk_label_new(name);
 	gtk_label_set_xalign (GTK_LABEL(label), 0);
@@ -306,7 +301,6 @@ static void load_func(GtkWidget *bt, gpointer ud){
 		fread(header,2,8,fp);
 	
 		for (uint8_t i=0;i<8;i++){
-			printf("size:%i\n",header[i]);
 	
 			char* strbuf = malloc(header[i]); 
 			fread (strbuf,1,header[i],fp);
@@ -326,18 +320,13 @@ static void load_func(GtkWidget *bt, gpointer ud){
 		char* buf_end = name_buf2 + image_name_buffer_length;
 
 
-		printf("n_images: %i\n",n_images);
-		printf("image_name_buffer: %s\n",name_buf2);
-		printf("image_name_buffer_length: %i\n",image_name_buffer_length);
 	
 		image_name_buffer_length = 0;
 		n_images=0;
 		for (char* name = name_buf2; name < buf_end; name += strlen(name) + 1 + 4 ){  
 	// NOTE the +4 is needed to skip over the suffix (bmp)	because load_images_helper_func splits it off
 	// will cause problems on suffixes longer than 3 characters
-			printf("%s\n", name);
 			load_images_func_helper(name,0);
-			printf("next..\n");
 			
 		}
 // TODO this code is a copy from load_images_func() 
@@ -420,13 +409,6 @@ static void load_images_func(GtkWidget *bt, gpointer ud){
 		gtk_widget_destroy (dialog);
 		if(res== GTK_RESPONSE_CANCEL)return;		
 			
-/*	
-	printf("col0: %i\n",(images[0]->format->palette->colors)[0].g);
-	printf("col1: %i\n",((uint32_t*)images[0]->format->palette->colors)[1]);
-	printf("col2: %i\n",((uint32_t*)images[0]->format->palette->colors)[2]);
-	
-	printf("nc: %i\n",((uint32_t*)images[0]->format->palette->ncolors));
-*/	
 	if(!colortable){
 		colortable=((uint32_t*)images[0].palette);
 		
@@ -493,7 +475,6 @@ static void save_func(GtkWidget *bt, gpointer ud){
 			
 				header[i]=gtk_text_buffer_get_char_count (buffer);
 			
-				printf("%i\n",header[i]);
 				
 			}
 			fwrite(header,2,8,fp);
@@ -507,7 +488,6 @@ static void save_func(GtkWidget *bt, gpointer ud){
 				gtk_text_buffer_get_end_iter(buffer,&end_iter);
 								  
 				const char* text=	gtk_text_buffer_get_text (buffer,&start_iter,&end_iter, 1);
-				printf("%s\n",text);
 				fputs (text,fp);
 			}
 			
@@ -517,7 +497,6 @@ static void save_func(GtkWidget *bt, gpointer ud){
 			fwrite(&image_name_buffer_length,2,1,fp );
 			fwrite(&image_name_buffer,1,image_name_buffer_length,fp );
 			
-			//printf("> %s\n", image_name_buffer + (int) image_name_pointers[i] );
 
 			
 			fclose(fp);	
@@ -560,13 +539,12 @@ static void import_gif( GtkWidget *bt, gpointer ud ) {
 
 	const char*  filename = gtk_file_chooser_get_filename (chooser);
 	gd_GIF *gif = gd_open_gif(filename);	
-	char *buffer = malloc(gif->width * gif->height * 3);
    	memcpy( name_buf2 ,	filename, strlen(filename) );
 	
 	
 	char* name = name_buf2;
 	
-	for (char* name2; name2 = strstr(name,"/"); name = name2+1);
+	for (char* name2; (name2 = strstr(name,"/")); name = name2+1);
 	
 	strstr(name,".")[0] = 0;
 	
@@ -575,37 +553,28 @@ static void import_gif( GtkWidget *bt, gpointer ud ) {
 	
 	image_name_buffer_length += name_length;
 	
-	for (char* name2; name2 = strstr(name,"/"); name = name2+1);
+	for (char* name2; (name2 = strstr(name,"/")); name = name2+1);
 			
 	char* numbered_name_buffer;	
 	int i = 0;
 	while (gd_get_frame(gif)) {
-		printf("start read gif\n");	
 		numbered_name_buffer= malloc(32);
 		uint8_t* pixelarray = malloc(gif->width * gif->height*3);
-		printf("_start read gif\n");	
 		
 		gd_render_frame(gif,pixelarray);
         sprintf( numbered_name_buffer, "%s%i", name, i );
 		
 		VarMapPair vmp={numbered_name_buffer, n_images};
 		var_map[var_map_size++]=vmp;
-		printf("vmp: %s,%i\n",       vmp.key, vmp.val);
-		printf("var_map_size: %i\n", var_map_size    );
-		printf("n_images: %i\n",     n_images);
 		
-		printf ( ": %i\n " , gif->width       );
 			
 		GtkWidget* label= gtk_label_new(numbered_name_buffer);
 		
-		printf("1\n");
 		gtk_label_set_xalign (GTK_LABEL(label), 0);
-		printf("2\n");
 		gtk_container_add(GTK_CONTAINER(imglist_widget), label);
 		
 				
 		memcpy(pixelarray, gif->frame, gif->width * gif->height);
-		printf("m of loop\n");
 
 		images[n_images] = (px_image) {
 			.width  = gif->width ,
@@ -621,7 +590,6 @@ static void import_gif( GtkWidget *bt, gpointer ud ) {
 		n_images++;
 		i++;
 
-		printf("end of loop\n");
 	}
 	
 	gd_close_gif(gif);
@@ -690,7 +658,7 @@ static gboolean export_gif(){
 	GtkWidget *label_scale, *label_frames, 
 			  *content_area, *details_dialog, 
 			  *spinner_scale, *spinner_f,  
-			  *ok_button, *grid;
+			  *grid;
 
 
 	details_dialog = gtk_dialog_new_with_buttons("export gif",0 ,0 , 
@@ -792,7 +760,6 @@ gboolean draw_the_gl(gpointer ud) {
 	}
 		
     GtkWidget *gl = g_gl_wid;
-    GdkWindow *wnd;
     te_gtkgl_make_current(TE_GTKGL(gl));
 	
 	glUseProgram(shader);
@@ -1002,7 +969,6 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 			void (*func)(layer*,short arg1,short arg2);
 				
 			
-			printf("%s %s %s\n",f,a1,a2);	
 			line=nextline;
 			if (line){
 				line++;
@@ -1046,7 +1012,6 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 			}
 			else if (a1[0]=='.') {
 				char found=0;
-				printf("ll_\n");
 				for (int l=0;l<n_labels;l++){
 					if (! strcmp(a1+1,labels[l])){
 						arg1=ips[l];
@@ -1102,7 +1067,6 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 			
 				
 		}
-		printf("\n");
 
 			
 		
@@ -1127,7 +1091,6 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 		
 	}
 	
-	printf("var_map_size: %i\n",var_map_size);
 }
 
 static unsigned int compileShader(unsigned int type,const char* src){
@@ -1174,16 +1137,12 @@ gboolean zoom (GtkWidget *bt, GdkEvent  *event, gpointer ud) {
 }
 
 static unsigned int createShader(){
-	printf("teshader\n");
 	unsigned int program = glCreateProgram();
-	printf("teshader\n");
-	printf("%d\n",program);
 	char* vs;
 	char* fs;
 	
 	{
 	strcpy(path_from_res,"basic.vs" );
-	printf("ptr: %s\n", path_to_res);
 	FILE *fp1=fopen(path_to_res,"r");
 	fseek(fp1, 0L, SEEK_END);
 	uint32_t sz = ftell(fp1);
@@ -1239,24 +1198,17 @@ void framerate_change_func(GtkWidget *spinner, gpointer ud){
 }
 
 static gboolean select_transparent_color(GtkWidget* w, GdkEvent* e, gpointer user_data) {
-	printf("stc  %i  \n",(uint8_t) user_data ); transparent_color_index =(uint8_t) (uint64_t) user_data;
+	printf("transparent color index=  %i  \n",(uint8_t) (uint64_t) user_data ); transparent_color_index =(uint8_t) (uint64_t) user_data;
 	glUniform1ui( glGetUniformLocation(shader,"transparent_index") ,(uint8_t) (uint64_t) user_data);
 	return 1;
 }
 
 int main(int argc, char *argv[]) {
-	//if (glewInit() ){
-//		printf("glew failed\n");
-//		return 1;
-
-//	}	
-	printf("%s\n",  argv[0]); 
 	strcpy(path_to_res,argv[0]);
 	strcpy(path_to_res+strlen(argv[0]) -4, "../res/");
 	path_from_res = path_to_res + strlen(path_to_res);
 	
 	
-	printf("mod:%d\n",(-7%5)+5);
     GtkWidget *palette_grid, 
 			  *cnt, *grid_down, *grid_buttons,
 			  *gl, 
@@ -1416,23 +1368,28 @@ int main(int argc, char *argv[]) {
 	gtk_container_add(GTK_CONTAINER(scrollpanes[8]), imglist_widget);
     
 	gtk_grid_attach(GTK_GRID(cnt), scrollpanes[8],   1,  0, 1, 2);
-	
+ 	
 	//gtk_container_add(GTK_CONTAINER(win),GTK_CONTAINER(menubar) );
     gtk_container_add(GTK_CONTAINER(win), cnt);
     gtk_widget_set_size_request(gl, 1024, 512);
     
 	gtk_window_set_icon_from_file(GTK_WINDOW(win), "../res/icon.bmp", 0);	
 								//this won't work unless called with the right current path
+	
+	
 	gtk_widget_show_all(win);	
 	
-    te_gtkgl_make_current(TE_GTKGL(gl));
 	
+    te_gtkgl_make_current(TE_GTKGL(gl));
+	if (glewInit() ){
+		printf("glew failed\n");
+		return 1;
+	}	
 	shader=createShader();
 	glUseProgram(shader);
 	
 	g_timeout_add_full(1000, 10, draw_the_gl, 0, 0);
 	glEnable(GL_TEXTURE_RECTANGLE_ARB);
-	printf("bla\n");		
 
 	
 	gtk_main();
