@@ -15,6 +15,8 @@
 #include <gmodule.h>
 #include <gdk/gdkkeysyms.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#include "pxa_logic.h"
+
 #define IS_BIG_ENDIAN (!*(unsigned char *)&(uint16_t){1})
 
 /*-------------
@@ -64,163 +66,8 @@ char p2 			 = 1;
 
 char path_to_res[64];
 char* path_from_res;
-
-/*-------------
-  ** Logic ** 
--------------*/
-
-short registers[64];
-
-typedef struct px_color{
-	uint8_t r;
-	uint8_t g;
-	uint8_t b;
-	uint8_t a;
-} px_color;
-
-typedef struct px_image{
-	uint16_t width;
-	uint16_t height;
-	px_color palette[256];
-	uint8_t* pixels;	
-} px_image;
-
-px_image images[256];
-
-uint8_t n_layers = 0;
-uint8_t n_images = 0;
-int16_t  compval = 0;
-
-typedef struct layer layer;
-
-typedef struct instruction{
-	void (*func)(layer*,short arg1,short arg2);
-	short arg1;
-	short arg2;
-	uint8_t a1_type;
-	uint8_t a2_type;
-	
-}instruction;
-
-typedef struct VarMapPair{
-	const char* key;
-	int16_t val;
-}VarMapPair;
-
-uint16_t framenr      = 0;
-VarMapPair var_map[256];
-uint8_t  var_map_size = 0;
-
-struct layer{
-	//layerlist* list;
-	//layerlist* current;
-	instruction instr[1024];
-	short registers[64];
-	uint16_t n_instr;
-	px_image* img;
-	uint8_t wait;
-	uint16_t instr_p;
-	unsigned int texture;
-	int16_t posx;
-	int16_t posy;
-	uint16_t shiftx;
-	uint16_t shifty;
-	VarMapPair var_map[256];
-	uint8_t var_map_size;
-};
-
-int16_t getVar(VarMapPair *var_map,uint8_t var_map_size,const char* name) {
-	for (int i=0;i<var_map_size;i++){
-		if (!strcmp(var_map[i].key ,name)){
-			return var_map[i].val;
-		}
-	}
-	return -1;
-}
-
-void setimage (layer* this,short arg1,short arg2){
-	this->registers[63]=arg1;
-	if ( ((uint16_t)arg1) < n_images){
-		this->img=images + arg1;
-		glTexImage2D(GL_TEXTURE_RECTANGLE_ARB ,0,GL_RED,this->img->width,this->img->height,
-						0,GL_RED,GL_UNSIGNED_BYTE,this->img->pixels);
-	}
-}
-
-void drawinstr (layer* this,short arg1,short arg2){
-	//setimage (this,this->registers[63],0);
-	this->wait=arg1;
-}
-
-void compare (layer* this,short arg1,short arg2){
-	compval=arg1-arg2;
-}
-
-void jump_not_equal (layer* this,short arg1,short arg2){
-	if (compval && ( ((uint16_t)arg1) < this->n_instr)  ) this->instr_p=arg1-1;
-}
-
-void jump_equal (layer* this,short arg1,short arg2){
-	if (!compval && ( ((uint16_t)arg1) < this->n_instr)) this->instr_p=arg1-1;
-}
-
-void jump_greater_then (layer* this,short arg1,short arg2){
-	if (compval>0 && ( ((uint16_t)arg1) < this->n_instr)) this->instr_p=arg1-1;
-}
-
-void jump_less_then (layer* this,short arg1,short arg2){
-	if (compval<0 && ( ((uint16_t)arg1) < this->n_instr)) this->instr_p=arg1-1;
-}
-
-void jump (layer* this,short arg1,short arg2){
-	if ( ((uint16_t)arg1) < this->n_instr) this->instr_p=arg1-1;
-}
-
-void move (layer* this,short arg1,short arg2){
-	this->posx+=arg1;
-	this->posy+=arg2;
-	
-}
-
-void set (layer* this,short arg1,short arg2){
-	registers[arg1]=arg2;
-}
-
-void add (layer* this,short arg1,short arg2){
-	registers[arg1]+=arg2;
-}
-
-void shift (layer* this,short arg1,short arg2){
-	this->shiftx+=arg1;
-	this->shifty+=arg2;
-}
-
-typedef struct MapPair{
-	const char* key;
-	void (*val)(layer* this,short arg1,short arg2);
-}MapPair;
-
-MapPair instr_map[]={
-	{"add",add},
-	{"cmp",compare},
-	{"drw",drawinstr},
-	{"img",setimage},
-	{"jeq",jump_equal},
-	{"jgt",jump_greater_then},
-	{"jlt",jump_less_then},
-	{"jmp",jump},
-	{"jne",jump_not_equal},
-	{"mov",move},
-	{"set",set},
-	{"shf",shift}
-		
-};
-
-uint8_t instr_map_size=sizeof(instr_map)/sizeof(instr_map[0]);
-
-layer layers[16];
-
 static void load_images_func_helper(const char* name,gpointer _){
+	(void)(_);
 	SDL_Surface* img=SDL_LoadBMP(name);
 	
 	uint8_t name_length = strlen(name) + 1;
@@ -253,23 +100,17 @@ static void load_images_func_helper(const char* name,gpointer _){
 	//tmpname[0]=".";
 			
 }
- 
-void (*getFunc(const char* name))(layer*, int16_t, int16_t) {
-	for (int i=0;i<instr_map_size;i++){
-		if (!strcmp(instr_map[i].key ,name)){
-			return instr_map[i].val;
-		}
-	}
-	return 0;
-}
 
 static void pause_func(GtkWidget *bt, gpointer ud){
-		paused=!paused;
+	(void)(bt);
+	(void)(ud);	
+	paused=!paused;
 		
 }
 
 static void load_func(GtkWidget *bt, gpointer ud){
-	
+	(void)(bt);
+	(void)(ud);	
 	GtkWidget *dialog;
 	GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_OPEN;
 	gint res;
@@ -369,6 +210,8 @@ static void load_func(GtkWidget *bt, gpointer ud){
 }
 
 static void load_images_func(GtkWidget *bt, gpointer ud){
+	(void)(bt);
+	(void)(ud);
 	GtkWidget *dialog;
 	GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_OPEN;
 	gint res;
@@ -425,9 +268,9 @@ static void load_images_func(GtkWidget *bt, gpointer ud){
 			
 			GdkColor color= {
 					0 ,
-					images[0].palette[i].r * 0x01010,
-					images[0].palette[i].g * 0x01010,
-					images[0].palette[i].b * 0x01010,
+					images[0].palette[i].r * 0x0101,
+					images[0].palette[i].g * 0x0101,
+					images[0].palette[i].b * 0x0101,
 			};
 			
 			gtk_widget_modify_bg ( colorbuttons[i], 0, &color);
@@ -438,6 +281,8 @@ static void load_images_func(GtkWidget *bt, gpointer ud){
 }
 
 static void save_func(GtkWidget *bt, gpointer ud){
+	(void)(bt);
+	(void)(ud);
 	GtkWidget *dialog;
 	GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_SAVE;
 	gint res;
@@ -508,6 +353,8 @@ static void save_func(GtkWidget *bt, gpointer ud){
 }
 
 static void import_gif( GtkWidget *bt, gpointer ud ) {
+	(void)(bt);
+	(void)(ud);
 	GtkWidget *dialog;
 	GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_OPEN;
 	gint res;
@@ -555,7 +402,7 @@ static void import_gif( GtkWidget *bt, gpointer ud ) {
 	
 	for (char* name2; (name2 = strstr(name,"/")); name = name2+1);
 			
-	char* numbered_name_buffer;	
+	char* numbered_name_buffer = 0;	
 	int i = 0;
 	while (gd_get_frame(gif)) {
 		numbered_name_buffer= malloc(32);
@@ -650,7 +497,9 @@ jmp .l0\n"
 }
 
 static void destroy_the_gl(GtkWidget *wid, gpointer ud) {
-    do_the_gl = FALSE;
+    (void)(wid);
+	(void)(ud);
+	do_the_gl = FALSE;
 }
 
 static gboolean export_gif(){
@@ -666,7 +515,8 @@ static gboolean export_gif(){
                   GTK_RESPONSE_ACCEPT,
                   ("_Cancel"),
                   GTK_RESPONSE_REJECT,
-				  0);
+				  NULL
+				  );
 		
 	label_scale  = gtk_label_new("scale:  			");
 	label_frames = gtk_label_new("number of frames: ");
@@ -743,7 +593,10 @@ static gboolean export_gif(){
 }
 
 static gboolean on_clicked(GtkWidget *wid, GdkEvent *ev, gpointer user_data) {
-    printf("clicked at %.3fx%.3f with button %d\n",
+    (void)(user_data);
+	(void)(wid);
+	(void)(ev);
+	printf("clicked at %.3fx%.3f with button %d\n",
         ev->button.x, ev->button.y, ev->button.button);
     
 	export_gif();
@@ -752,6 +605,7 @@ static gboolean on_clicked(GtkWidget *wid, GdkEvent *ev, gpointer user_data) {
 }
 
 gboolean draw_the_gl(gpointer ud) {
+	(void)(ud);
 	if (paused) return TRUE; 
 	if (framerate_changed){
 		g_timeout_add_full(1000, 1000.f / framerate	, draw_the_gl, 0, 0);
@@ -767,7 +621,7 @@ gboolean draw_the_gl(gpointer ud) {
         return FALSE;
 
 
-    for (int i=0; i < 1 +  (frame_count-1) * rendergif; i++){
+    for (uint16_t i=0; i < 1 +  (frame_count-1) * rendergif; i++){
 		
 		if(rendergif){
 			glViewport(0, 0, width_gif, height_gif);
@@ -799,7 +653,7 @@ gboolean draw_the_gl(gpointer ud) {
 		glUniform1ui( glGetUniformLocation(shader,"gif") ,rendergif );
 	
 		
-		for (char i=0;i<n_layers;i++){
+		for (uint8_t i=0;i<n_layers;i++){
 			glBindTexture(GL_TEXTURE_RECTANGLE_ARB ,layers[i].texture);
 		
 			while(!(layers[i].wait)  && (layers[i].instr_p < layers[i].n_instr) ){
@@ -814,7 +668,7 @@ gboolean draw_the_gl(gpointer ud) {
 		layers[i].wait--;
 		}
 		
-		for (char i=0;i<n_layers;i++){
+		for (uint8_t i=0;i<n_layers;i++){
 			if(!layers[i].img)continue;	
 			glBindTexture(GL_TEXTURE_RECTANGLE_ARB ,layers[i].texture);
 		
@@ -914,6 +768,8 @@ gboolean draw_the_gl(gpointer ud) {
 }
 
 static void refresh(GtkWidget *bt, gpointer ud) {
+	(void)(ud);
+	(void)(bt);
 	n_layers=0;
 	
 	framenr=0;
@@ -1000,8 +856,8 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 			
 			
 			
-			int16_t arg1;
-			int16_t arg2;
+			int16_t arg1=0;
+			int16_t arg2=0;
 			
 			
 			if ( isdigit(a1[0]) || a1[0]=='-'  ){
@@ -1118,6 +974,7 @@ static unsigned int compileShader(unsigned int type,const char* src){
 }
 
 gboolean zoom (GtkWidget *bt, GdkEvent  *event, gpointer ud) {
+	(void)(bt);
 	if (ud){
 		scale *= 1-((GdkEventScroll*) event)->delta_y/10.f;
 		return 1;
@@ -1193,11 +1050,14 @@ void spinner_value_changed(GtkWidget *spinner, gpointer ud){
 }
 
 void framerate_change_func(GtkWidget *spinner, gpointer ud){
+	(void)(ud);
 	framerate = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spinner));
 	framerate_changed = 1;
 }
 
 static gboolean select_transparent_color(GtkWidget* w, GdkEvent* e, gpointer user_data) {
+	(void)(w);
+	(void)(e);
 	printf("transparent color index=  %i  \n",(uint8_t) (uint64_t) user_data ); transparent_color_index =(uint8_t) (uint64_t) user_data;
 	glUniform1ui( glGetUniformLocation(shader,"transparent_index") ,(uint8_t) (uint64_t) user_data);
 	return 1;
