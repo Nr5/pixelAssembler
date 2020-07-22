@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <gtk/gtk.h>
-//#include <gtksourceview/gtksourceview.h>
+#include <gtksourceview/gtksource.h>
+#include <gtksourceview/gtksourceview.h>
 #include <gdk/gdk.h>
 #include <GL/glew.h>
 #include "tegtkgl.h"
@@ -50,6 +51,14 @@ gd_GIF* gif_dec;
 /*-------------
    ** UI ** 
 -------------*/
+		uint16_t prev_ips[8];
+		GtkTextTag* ip_tags[8];	
+		GdkRGBA textcolor =(GdkRGBA)	{
+			0xffff,
+			0xffff,
+			0xffff,
+			0xffff
+	};
 
 static GtkWidget *g_gl_wid = 0;
 GtkWidget *win;
@@ -631,7 +640,7 @@ gboolean draw_the_gl(gpointer ud) {
 					gtk_widget_get_allocated_height(gl) / 2 - height * scale / 2, 
 					width  * scale,
 				   	height * scale
-			  );
+			);
 	
 		}
 	
@@ -652,39 +661,108 @@ gboolean draw_the_gl(gpointer ud) {
 		glUniformMatrix4fv( glGetUniformLocation(shader,"matrix") ,1,0,modelview );
 		glUniform1ui( glGetUniformLocation(shader,"gif") ,rendergif );
 	
+	// Logic	
+		GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textViews[i]));
 		
 		for (uint8_t i=0;i<n_layers;i++){
 			glBindTexture(GL_TEXTURE_RECTANGLE_ARB ,layers[i].texture);
-		
 			while(!(layers[i].wait)  && (layers[i].instr_p < layers[i].n_instr) ){
-				instruction instr=layers[i].instr[layers[i].instr_p];
-				instr.func(layers+i,
-						instr.a1_type ? registers[instr.arg1] :instr.arg1,
-						instr.a2_type ? registers[instr.arg2] :instr.arg2
+				
+				GtkTextIter start_iter;
+				GtkTextIter end_iter;
+				
+				gtk_text_buffer_get_iter_at_line(buffer,&start_iter,prev_ips[i]);
+				gtk_text_buffer_get_iter_at_line(buffer,&end_iter,prev_ips[i]+1);
 						
-  					);
+						
+				gtk_text_buffer_remove_tag(buffer,ip_tags[i],&start_iter,&end_iter);
+				
+				prev_ips[i]=layers[i].instr_p;
+
+				/*
+				printf("%3i %s	%s%i	%s%i	",
+						layers[i].instr_p,
+						
+						instr.func == add ? "add" :
+							instr.func == cmp ? "cmp" :
+							instr.func == drw ? "drw" :
+							instr.func == jeq ? "jeq" :
+							instr.func == jgt ? "jgt" :
+							instr.func == jlt ? "jlt" :
+							instr.func == jmp ? "jmp" :
+							instr.func == jne ? "jne" :
+												"set" ,
+
+						instr.a1_type ? "$" : " ",
+						instr.arg1,
+						instr.a2_type ? "$" : " ",
+						instr.arg2
+						);
+				if (instr.a1_type){
+					printf("($%i = %i) ", instr.arg1, registers[(uint16_t) instr.arg1]);
+				}
+				if (instr.a2_type){
+					printf("($%i = %i)", instr.arg2, registers[(uint16_t) instr.arg2]);
+				}
+				printf("\n");
+				*/
+				
+				gtk_text_buffer_get_iter_at_line(buffer,&start_iter,prev_ips[i]);
+				gtk_text_buffer_get_iter_at_line(buffer,&end_iter,prev_ips[i]+1);
+				
+
+				//g_object_set(GTK_TEXT_TAG(tag1), "background-set",TRUE, "background-rgba",&color, NULL);
+
+				gtk_text_buffer_apply_tag (	buffer,	ip_tags[i], &start_iter, &end_iter	);
+				instruction instr=layers[i].instr[prev_ips[i]];
+				instr.func(
+							layers + i,
+							instr.a1_type ? registers[(uint16_t) instr.arg1] :instr.arg1,
+							instr.a2_type ? registers[(uint16_t) instr.arg2] :instr.arg2
+						  );
 				layers[i].instr_p++;
 		    }
+
 		layers[i].wait--;
 		}
-		
-		for (uint8_t i=0;i<n_layers;i++){
-			if(!layers[i].img)continue;	
-			glBindTexture(GL_TEXTURE_RECTANGLE_ARB ,layers[i].texture);
-		
 	
-			layers[i].shiftx=(layers[i].shiftx+layers[i].img->width)  % layers[i].img->width;
-			layers[i].shifty=(layers[i].shifty+layers[i].img->height) % layers[i].img->height;
+	// Render
+		for (uint8_t i=0;i<n_layers;i++){
+			glBindTexture(GL_TEXTURE_RECTANGLE_ARB ,layers[i].texture);
+		 	px_image* image = images + registers[0xffff-i];
+				
+			glTexImage2D(
+		          GL_TEXTURE_RECTANGLE_ARB ,0,GL_RED,
+				  image->width, image->height,
+				  0,GL_RED,GL_UNSIGNED_BYTE,image->pixels
+				);
+	        
+
 		
-			glUniform2ui( glGetUniformLocation(shader,"shift"), layers[i].shiftx,     layers[i].shifty );
-			glUniform2ui( glGetUniformLocation(shader,"size") , layers[i].img->width, layers[i].img->height );
+			//printf("%p, %i, %i\n",image,image->width,image->height);		
+	
 		
 		
-			int16_t x=layers[i].posx;
-			int16_t y=layers[i].posy;
-			int16_t w=layers[i].img->width;
-			int16_t h=layers[i].img->height;
 		
+			int16_t x=registers[0xffff - 8*1 - i];
+			int16_t y=registers[0xffff - 8*2 - i];
+			int16_t w=registers[0xffff - 8*3 - i];
+			int16_t h=registers[0xffff - 8*4 - i];
+			
+			if ( !w ){
+				w = image->width;
+			}	
+			if ( !h ){
+				h = image->height;
+			}
+
+			int16_t shiftx=(registers[0xffff - 8*5 -i] + w)  % w;
+			int16_t shifty=(registers[0xffff - 8*6 -i] + h)  % h;
+			
+			glUniform2ui( glGetUniformLocation(shader,"shift"), shiftx, shifty );
+			glUniform2ui( glGetUniformLocation(shader,"size") , w, h );
+
+			
 			glBegin(GL_QUADS);
 			glVertex4i(
 					x,y,
@@ -707,7 +785,7 @@ gboolean draw_the_gl(gpointer ud) {
 	
 		}
 	
-		if (layers[0].img && gif && rendergif){
+		if (gif && rendergif){
 	
 			uint8_t pixels[width_gif * height_gif];
 			glReadPixels(0, 0, width_gif, height_gif, GL_RED, GL_UNSIGNED_BYTE, pixels);
@@ -774,25 +852,54 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 	
 	framenr=0;
 	
-	
+	for (int i=0; i<0x010000; i++){
+		registers[i]=0;
+	}
 
 	for (uint8_t i =0;i<8;i++){
 		
-		VarMapPair vmp = {
+		VarMapPair vmp1 = {
 			"img",
-			63
+			0xffff-8*0-i
 		};
-		
-		layers[i].var_map[63]=vmp;
-		
+		VarMapPair vmp2 = {
+			"posx",
+			0xffff-8*1-i
+		};
+		VarMapPair vmp3 = {
+			"posy",
+			0xffff-8*2-i
+		};
+		VarMapPair vmp4 = {
+			"width",
+			0xffff-8*3-i
+		};
+		VarMapPair vmp5 = {
+			"height",
+			0xffff-8*4-i
+		};
+		VarMapPair vmp6 = {
+			"shiftx",
+			0xffff-8*5-i
+		};
+		VarMapPair vmp7 = {
+			"shifty",
+			0xffff-8*6-i
+		};
+
+
+		layers[i].var_map[0]=vmp1;
+		layers[i].var_map[1]=vmp2;
+		layers[i].var_map[2]=vmp3;
+		layers[i].var_map[3]=vmp4;
+		layers[i].var_map[4]=vmp5;
+		layers[i].var_map[5]=vmp6;
+		layers[i].var_map[6]=vmp7;
+		layers[i].var_map_size=7;
+
 		layers[i].n_instr=0;
 		layers[i].instr_p=0;
 			
-		layers[i].posx=0;
-		layers[i].posy=0;
-		layers[i].shiftx=0;
-		layers[i].shifty=0;
-		
 		VarMapPair jumpinstr[64];
 		uint8_t n_jumpinstr=0;
 		
@@ -859,17 +966,21 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 			int16_t arg1=0;
 			int16_t arg2=0;
 			
+			uint8_t type1=0;
+			uint8_t type2=0;
+
+			if ( a1[0]=='$' ){
+				a1++;
+				type1=1;
+			}
 			
 			if ( isdigit(a1[0]) || a1[0]=='-'  ){
 				arg1=atoi(a1);
 			}
-			else if ( a1[0]=='$' ){
-				arg1=atoi(a1+1);
-			}
 			else if (a1[0]=='.') {
 				char found=0;
 				for (int l=0;l<n_labels;l++){
-					if (! strcmp(a1+1,labels[l])){
+					if ( !strcmp( a1+1,labels[l]) ){
 						arg1=ips[l];
 						found=1;
 						break;
@@ -880,10 +991,11 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 					jumpinstr[n_jumpinstr++]=ssp;
 				}
 			}else {
-				if ( ( arg1=getVar(layers[i].var_map,layers[i].var_map_size , a1)) <0 ){
+				if ( varmap_contains(layers[i].var_map,layers[i].var_map_size , a1)  ){
+					arg1=getVar(layers[i].var_map,layers[i].var_map_size,a1);
+				} else {
 					arg1=getVar(var_map,var_map_size,a1);
 				}
-				
 			}
 			
 			
@@ -891,25 +1003,31 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 			if (!a2){
 				arg2=0;
 			}
-			else if ( isdigit(*a2) || a2[0]=='-' ){
-				arg2=atoi(a2);
-			}
-			else if ( a2[0]=='$' ){
-				arg2=atoi(a2+1);
-			}else {
-				if ( ( arg2=getVar(layers[i].var_map,layers[i].var_map_size,a2)) <0 ){
-					arg2=getVar(var_map,var_map_size,a2);
+			else {
+				if ( a2[0]=='$' ){
+					a2++;
+					type2=1;
 				}
-			}
+				
+				if ( isdigit(*a2) || a2[0]=='-' ){
+					arg2=atoi(a2);
+				}
+				else {
+					if ( varmap_contains(layers[i].var_map,layers[i].var_map_size , a2)  ){
+						arg2=getVar(layers[i].var_map,layers[i].var_map_size,a2);
+					} else {
+						arg2=getVar(var_map,var_map_size,a2);
+					}
+				}
 			
-			
+			}	
 			
 			instruction in={
 				.func=func,
 				.arg1= arg1,
 				.arg2= arg2,
-				.a1_type=a1[0]=='$',
-				.a2_type=a2 ? a2[0]=='$': 0
+				.a1_type=type1,
+				.a2_type=type2
 			};
 			
 			
@@ -1204,12 +1322,47 @@ int main(int argc, char *argv[]) {
 		namebuffer[6]=48+i;
 		frames[i] =gtk_frame_new(namebuffer);
 		scrollpanes[i] = gtk_scrolled_window_new(NULL, NULL);
-		textViews[i] =gtk_text_view_new();
-	
+		textViews[i] = gtk_text_view_new();
+		
 		gtk_container_add(GTK_CONTAINER(frames[i]),scrollpanes[i]);
 		gtk_container_add(GTK_CONTAINER(scrollpanes[i]),textViews[i]);
 		
 		
+		
+		GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textViews[i]));
+
+	 	ip_tags[i]= gtk_text_buffer_create_tag( buffer,
+												0,
+												"background",
+												"#000040",
+												NULL
+												);
+
+	
+		GtkTextTag* tag = gtk_text_buffer_create_tag( buffer,
+                                        				"highlight",
+														"foreground",
+														"#4080ff",
+														NULL
+													);
+
+		//g_object_set(GTK_TEXT_TAG(tag1), "background-set",TRUE, "background-rgba",&color, NULL);
+		
+		
+
+		GtkTextIter start_iter ;
+		gtk_text_buffer_get_start_iter(buffer,&start_iter);
+		
+	
+		gtk_text_buffer_insert_with_tags (
+						buffer,
+						&start_iter,
+						"bla",
+						3,
+						tag,
+						NULL
+						);
+
 		gtk_widget_set_size_request(scrollpanes[i], 0, 400);
 		gtk_widget_set_hexpand(scrollpanes[i],1);
 		gtk_widget_set_vexpand(scrollpanes[i],1);
