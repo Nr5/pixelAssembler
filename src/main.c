@@ -51,9 +51,11 @@ gd_GIF* gif_dec;
 /*-------------
    ** UI ** 
 -------------*/
-		uint16_t prev_ips[8];
-		GtkTextTag* ip_tags[8];	
-		GdkRGBA textcolor =(GdkRGBA)	{
+uint16_t prev_ips[8];
+uint16_t lines_of_ips[0x10000][8];
+
+GtkTextTag* ip_tags[8];	
+GdkRGBA textcolor =(GdkRGBA)	{
 			0xffff,
 			0xffff,
 			0xffff,
@@ -75,6 +77,7 @@ char p2 			 = 1;
 
 char path_to_res[64];
 char* path_from_res;
+
 static void load_images_func_helper(const char* name,gpointer _){
 	(void)(_);
 	SDL_Surface* img=SDL_LoadBMP(name);
@@ -662,25 +665,27 @@ gboolean draw_the_gl(gpointer ud) {
 		glUniform1ui( glGetUniformLocation(shader,"gif") ,rendergif );
 	
 	// Logic	
-		GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textViews[i]));
-		
+		uint8_t wait=1;	
 		for (uint8_t i=0;i<n_layers;i++){
 			glBindTexture(GL_TEXTURE_RECTANGLE_ARB ,layers[i].texture);
 			while(!(layers[i].wait)  && (layers[i].instr_p < layers[i].n_instr) ){
 				
+				GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textViews[i]));
 				GtkTextIter start_iter;
 				GtkTextIter end_iter;
 				
-				gtk_text_buffer_get_iter_at_line(buffer,&start_iter,prev_ips[i]);
-				gtk_text_buffer_get_iter_at_line(buffer,&end_iter,prev_ips[i]+1);
-						
-						
+				gtk_text_buffer_get_iter_at_line(buffer,&start_iter,lines_of_ips[prev_ips[i]][i] );
+				gtk_text_buffer_get_iter_at_line(buffer,&end_iter,lines_of_ips[prev_ips[i]][i] +1);
+			
 				gtk_text_buffer_remove_tag(buffer,ip_tags[i],&start_iter,&end_iter);
 				
 				prev_ips[i]=layers[i].instr_p;
 
-				/*
-				printf("%3i %s	%s%i	%s%i	",
+				
+				instruction instr=layers[i].instr[prev_ips[i]];
+		/*		
+				printf("l%i %3i %s	%s%i	%s%i	",
+						i,
 						layers[i].instr_p,
 						
 						instr.func == add ? "add" :
@@ -689,6 +694,8 @@ gboolean draw_the_gl(gpointer ud) {
 							instr.func == jeq ? "jeq" :
 							instr.func == jgt ? "jgt" :
 							instr.func == jlt ? "jlt" :
+							instr.func == jge ? "jge" :
+							instr.func == jle ? "jle" :
 							instr.func == jmp ? "jmp" :
 							instr.func == jne ? "jne" :
 												"set" ,
@@ -705,27 +712,30 @@ gboolean draw_the_gl(gpointer ud) {
 					printf("($%i = %i)", instr.arg2, registers[(uint16_t) instr.arg2]);
 				}
 				printf("\n");
-				*/
+		*/		
 				
-				gtk_text_buffer_get_iter_at_line(buffer,&start_iter,prev_ips[i]);
-				gtk_text_buffer_get_iter_at_line(buffer,&end_iter,prev_ips[i]+1);
+				gtk_text_buffer_get_iter_at_line(buffer,&start_iter,lines_of_ips[prev_ips[i]][i] );
+				gtk_text_buffer_get_iter_at_line(buffer,&end_iter,lines_of_ips[prev_ips[i]][i] +1);
 				
-
 				//g_object_set(GTK_TEXT_TAG(tag1), "background-set",TRUE, "background-rgba",&color, NULL);
 
 				gtk_text_buffer_apply_tag (	buffer,	ip_tags[i], &start_iter, &end_iter	);
-				instruction instr=layers[i].instr[prev_ips[i]];
 				instr.func(
 							layers + i,
 							instr.a1_type ? registers[(uint16_t) instr.arg1] :instr.arg1,
 							instr.a2_type ? registers[(uint16_t) instr.arg2] :instr.arg2
 						  );
 				layers[i].instr_p++;
+				
 		    }
-
-		layers[i].wait--;
+			wait = wait && layers[i].wait;
 		}
-	
+		for (int i=0; wait && i < 8; i++){
+			layers[i].wait--;
+		}
+		if (!wait && n_layers) {
+			return TRUE;
+		}
 	// Render
 		for (uint8_t i=0;i<n_layers;i++){
 			glBindTexture(GL_TEXTURE_RECTANGLE_ARB ,layers[i].texture);
@@ -924,15 +934,18 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 		char* nextline=strchr(line,'\n');
 		if(nextline) *(nextline) = 0;
 		
+		uint16_t linenr=-1;
+
 		while (line){
 			
 			char* f=strtok(line, " ");
 			char* a1=strtok(0, " ");
 			char* a2=strtok(0, " ");
 			void (*func)(layer*,short arg1,short arg2);
-				
 			
 			line=nextline;
+			linenr++;
+
 			if (line){
 				line++;
 				nextline=strchr(line,'\n');
@@ -960,7 +973,7 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 				continue;
 			}
 			
-			
+				
 			
 			
 			int16_t arg1=0;
@@ -1032,8 +1045,8 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 			
 			
 			
-			layers[i].instr[layers[i].n_instr]=in;
-
+			layers[i].instr[layers[i].n_instr] = in;
+			lines_of_ips[layers[i].n_instr][i] = linenr;
 			layers[i].n_instr++;
 			
 				
