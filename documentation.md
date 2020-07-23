@@ -28,8 +28,6 @@ Instructions
 	
 	* **. drw f   .** 	 draw current image for f frames 		 
 	
-	* **. img i   .**  	 set current image to i  can be an index or a string  look add image list
-	
 	
   // Jump instructions
 
@@ -45,13 +43,6 @@ Instructions
 	
 	* **. jle .label .**   jump if in last cmp the first value was less than or equal to the second one
 
-  // Move and shift images	
-
-	* **. mvt x y .** 	 move image to x,y   _//_not_yet_implemented_
-	
-	* **. mov x y .** 	 move image by x,y pixels
-	
-	* **. shf x y .**	 shift the pixels of the current image by x,y loops pixels 
 
 
 pxa file format
