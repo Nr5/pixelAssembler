@@ -51,6 +51,15 @@ gd_GIF* gif_dec;
 /*-------------
    ** UI ** 
 -------------*/
+
+enum flags{
+ step 	= 1<<0,
+ debug 	= 1<<1,
+ paused	= 1<<2
+};
+uint8_t state_flags=0;
+
+
 uint16_t prev_ips[8];
 uint16_t lines_of_ips[0x10000][8];
 
@@ -68,12 +77,10 @@ GtkWidget* colorbuttons[256];
 GtkWidget* textViews[8];
 GtkWidget* menubar;
 GtkWidget* imglist_widget;
+GtkWidget* show_regs_widgets[7][8] ;
 
 uint8_t transparent_color_index;   
 static unsigned int shader;
-unsigned char time_0 = 0;
-char paused 		 = 0;
-char p2 			 = 1;
 
 char path_to_res[64];
 char* path_from_res;
@@ -113,13 +120,29 @@ static void load_images_func_helper(const char* name,gpointer _){
 			
 }
 
-static void pause_func(GtkWidget *bt, gpointer ud){
+static void toggle_flag_func(GtkWidget *bt, gpointer ud){
 	(void)(bt);
-	(void)(ud);	
-	paused=!paused;
 		
+	if (state_flags & (uint64_t)ud){
+		state_flags &= ~ ((uint64_t)ud);
+	}
+	else {	
+		state_flags |=  (uint64_t)ud;
+	}
+
+
 }
 
+static void step_func(GtkWidget *bt, gpointer ud){
+	(void)(bt);
+	(void)(ud);
+
+	state_flags &= ~paused;
+	state_flags |= step;
+	
+
+
+}
 static void load_func(GtkWidget *bt, gpointer ud){
 	(void)(bt);
 	(void)(ud);	
@@ -618,7 +641,9 @@ static gboolean on_clicked(GtkWidget *wid, GdkEvent *ev, gpointer user_data) {
 
 gboolean draw_the_gl(gpointer ud) {
 	(void)(ud);
-	if (paused) return TRUE; 
+	if (state_flags & paused  ){
+		return TRUE; 
+	}
 	if (framerate_changed){
 		g_timeout_add_full(1000, 1000.f / framerate	, draw_the_gl, 0, 0);
     	framerate_changed = 0;
@@ -668,7 +693,7 @@ gboolean draw_the_gl(gpointer ud) {
 		uint8_t wait=1;	
 		for (uint8_t i=0;i<n_layers;i++){
 			glBindTexture(GL_TEXTURE_RECTANGLE_ARB ,layers[i].texture);
-			while(!(layers[i].wait)  && (layers[i].instr_p < layers[i].n_instr) ){
+			while( !(layers[i].wait)  && (layers[i].instr_p < layers[i].n_instr) ){
 				
 				GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textViews[i]));
 				GtkTextIter start_iter;
@@ -676,11 +701,10 @@ gboolean draw_the_gl(gpointer ud) {
 				
 				gtk_text_buffer_get_iter_at_line(buffer,&start_iter,lines_of_ips[prev_ips[i]][i] );
 				gtk_text_buffer_get_iter_at_line(buffer,&end_iter,lines_of_ips[prev_ips[i]][i] +1);
-			
+				
 				gtk_text_buffer_remove_tag(buffer,ip_tags[i],&start_iter,&end_iter);
 				
 				prev_ips[i]=layers[i].instr_p;
-
 				
 				instruction instr=layers[i].instr[prev_ips[i]];
 		/*		
@@ -718,21 +742,31 @@ gboolean draw_the_gl(gpointer ud) {
 				gtk_text_buffer_get_iter_at_line(buffer,&end_iter,lines_of_ips[prev_ips[i]][i] +1);
 				
 				//g_object_set(GTK_TEXT_TAG(tag1), "background-set",TRUE, "background-rgba",&color, NULL);
-
+				
 				gtk_text_buffer_apply_tag (	buffer,	ip_tags[i], &start_iter, &end_iter	);
 				instr.func(
 							layers + i,
 							instr.a1_type ? registers[(uint16_t) instr.arg1] :instr.arg1,
 							instr.a2_type ? registers[(uint16_t) instr.arg2] :instr.arg2
 						  );
-				layers[i].instr_p++;
 				
+				for(uint8_t ii =0;ii<7;ii++){
+					gtk_spin_button_set_value(GTK_SPIN_BUTTON(	show_regs_widgets[ii][i]), registers[0xffff- 8*ii -i ]  );
+				}
+				
+				layers[i].instr_p++;
+				if (state_flags & (debug | step))	break;
 		    }
 			wait = wait && layers[i].wait;
 		}
 		for (int i=0; wait && i < 8; i++){
 			layers[i].wait--;
 		}
+		if (state_flags & step) {
+			state_flags |= paused;
+			state_flags &= ~step;
+			
+		}	
 		if (!wait && n_layers) {
 			return TRUE;
 		}
@@ -745,15 +779,12 @@ gboolean draw_the_gl(gpointer ud) {
 		          GL_TEXTURE_RECTANGLE_ARB ,0,GL_RED,
 				  image->width, image->height,
 				  0,GL_RED,GL_UNSIGNED_BYTE,image->pixels
-				);
+			);
 	        
-
-		
+			
+			
 			//printf("%p, %i, %i\n",image,image->width,image->height);		
-	
-		
-		
-		
+			
 			int16_t x=registers[0xffff - 8*1 - i];
 			int16_t y=registers[0xffff - 8*2 - i];
 			int16_t w=registers[0xffff - 8*3 - i];
@@ -765,34 +796,34 @@ gboolean draw_the_gl(gpointer ud) {
 			if ( !h ){
 				h = image->height;
 			}
-
+			
 			int16_t shiftx=(registers[0xffff - 8*5 -i] + w)  % w;
 			int16_t shifty=(registers[0xffff - 8*6 -i] + h)  % h;
 			
 			glUniform2ui( glGetUniformLocation(shader,"shift"), shiftx, shifty );
 			glUniform2ui( glGetUniformLocation(shader,"size") , w, h );
-
+			
 			
 			glBegin(GL_QUADS);
 			glVertex4i(
 					x,y,
 					0,0
 				);
-		
+			
 			glVertex4i(
 				 x+w, y,
 				 0+w, 0
 				);
-		
+			
 			glVertex4i(
 				 x+w, y+h,
 				 0+w ,0+h);
-		
+			
 			glVertex4i(
 				x, y+h,
 				0, 0+h);
 			glEnd();	
-	
+			
 		}
 	
 		if (gif && rendergif){
@@ -851,6 +882,8 @@ gboolean draw_the_gl(gpointer ud) {
 	glUseProgram(shader);
 	
 	te_gtkgl_swap(TE_GTKGL(gl));
+	
+	
 	return TRUE;
 
 }
@@ -861,10 +894,7 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 	n_layers=0;
 	
 	framenr=0;
-	
-	for (int i=0; i<0x010000; i++){
-		registers[i]=0;
-	}
+	memset(registers, 0, 0x010000*2);	
 
 	for (uint8_t i =0;i<8;i++){
 		
@@ -1199,15 +1229,15 @@ int main(int argc, char *argv[]) {
 	strcpy(path_to_res+strlen(argv[0]) -4, "../res/");
 	path_from_res = path_to_res + strlen(path_to_res);
 	
-	
     GtkWidget *palette_grid, 
 			  *cnt, *grid_down, *grid_buttons,
 			  *gl, 
 			  *bt1,*bt2,*bt3,*bt4,*bt5,*bt6,
 			  *label_width, *label_height, *label_framerate,
 			  *spinner_x, *spinner_y, *spinner_framerate,
-			  *gif_import_button;
-			  ;
+			  *gif_import_button,
+			  *button_debug, *button_step
+				;
     
     gtk_init(&argc, &argv);
 	win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -1229,6 +1259,10 @@ int main(int argc, char *argv[]) {
 	bt5 = gtk_button_new_with_label("import images");
 	bt6 = gtk_button_new_with_label("export as gif");
 	
+	button_debug = gtk_button_new_with_label("debug");
+	button_step = gtk_button_new_with_label("step");
+
+	bt6 = gtk_button_new_with_label("export as gif");
 	label_width  = gtk_label_new("width:");
 	label_height = gtk_label_new("height:");
     label_framerate = gtk_label_new("fps:");
@@ -1240,20 +1274,21 @@ int main(int argc, char *argv[]) {
 	gif_import_button = gtk_button_new_with_label("import gif");
 
 	
-	
 	g_signal_connect(G_OBJECT(spinner_x), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)&width);
 	g_signal_connect(G_OBJECT(spinner_y), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)&height);
 	
 	g_signal_connect(G_OBJECT(spinner_framerate), "value_changed", G_CALLBACK(framerate_change_func), (gpointer)&height);
 	
-	g_signal_connect(G_OBJECT(bt1), "clicked", G_CALLBACK(refresh), (gpointer)&cnt);
-	g_signal_connect(G_OBJECT(bt2), "clicked", G_CALLBACK(pause_func), (gpointer)&cnt);
-	g_signal_connect(G_OBJECT(bt3), "clicked", G_CALLBACK(load_func), (gpointer)&cnt);
-	g_signal_connect(G_OBJECT(bt4), "clicked", G_CALLBACK(save_func), (gpointer)&cnt);
-	g_signal_connect(G_OBJECT(bt5), "clicked", G_CALLBACK(load_images_func), (gpointer)&cnt);
-	g_signal_connect(G_OBJECT(bt6), "clicked", G_CALLBACK(export_gif), (gpointer)&cnt);
+	g_signal_connect(G_OBJECT(bt1), "clicked", 			G_CALLBACK(refresh), 0	);
+	g_signal_connect(G_OBJECT(bt2), "clicked", 			G_CALLBACK(toggle_flag_func), (gpointer) paused  );
+	g_signal_connect(G_OBJECT(button_debug), "clicked", G_CALLBACK(toggle_flag_func), (gpointer) debug  );
+	g_signal_connect(G_OBJECT(button_step),  "clicked", G_CALLBACK(step_func), (gpointer) step  );
+	g_signal_connect(G_OBJECT(bt3), "clicked", G_CALLBACK(load_func), 0);
+	g_signal_connect(G_OBJECT(bt4), "clicked", G_CALLBACK(save_func), 0);
+	g_signal_connect(G_OBJECT(bt5), "clicked", G_CALLBACK(load_images_func), 0);
+	g_signal_connect(G_OBJECT(bt6), "clicked", G_CALLBACK(export_gif), 0);
 	
-	g_signal_connect(G_OBJECT(gif_import_button), "clicked", G_CALLBACK(import_gif), (gpointer)&cnt);
+	g_signal_connect(G_OBJECT(gif_import_button), "clicked", G_CALLBACK(import_gif),0 );
     
 	// set a callback that will stop the timer from drawing
     g_signal_connect(G_OBJECT(gl), "destroy", G_CALLBACK(destroy_the_gl), 0);
@@ -1266,12 +1301,8 @@ int main(int argc, char *argv[]) {
 	g_signal_connect(G_OBJECT(gl), "scroll-event",    G_CALLBACK(zoom), (gpointer) 1 );
     g_signal_connect(G_OBJECT(win), "key_press_event", G_CALLBACK(zoom), (gpointer) 0 );
 
-    // our layout
-
-
 	gtk_widget_set_size_request(palette_grid, 140, 140);
     
-	
 	for (uint64_t i = 0; i< 256; i++ ){
 		
 		colorbuttons[i]=gtk_event_box_new();
@@ -1289,7 +1320,6 @@ int main(int argc, char *argv[]) {
 		gtk_grid_attach(GTK_GRID(palette_grid), colorbuttons[i],   i%16,  i/16, 1, 1);
 		
 	}
-	
 	
 	GdkRGBA color= {65535, 0, 0, 0xffff};	
 	gtk_widget_override_background_color ( colorbuttons[0], 0, &color);
@@ -1324,11 +1354,13 @@ int main(int argc, char *argv[]) {
 
   	gtk_grid_attach(GTK_GRID(grid_buttons), gif_import_button,    0,  6, 1, 1);
 
+  	gtk_grid_attach(GTK_GRID(grid_buttons), button_debug ,   0,  7, 1, 1);
+	gtk_grid_attach(GTK_GRID(grid_buttons), button_step  ,   1,  7, 1, 1);
 
 	gtk_grid_attach(GTK_GRID(cnt), grid_buttons,   2,  1, 1, 1);
 	GtkWidget* frames[8];
 	GtkWidget* scrollpanes[9];
-
+	GtkWidget* varlist[8];
 
 	for (uint8_t i = 0;i<8;i++){
 		char namebuffer[8]="Layer__";
@@ -1340,49 +1372,82 @@ int main(int argc, char *argv[]) {
 		gtk_container_add(GTK_CONTAINER(frames[i]),scrollpanes[i]);
 		gtk_container_add(GTK_CONTAINER(scrollpanes[i]),textViews[i]);
 		
-		
-		
 		GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textViews[i]));
 
-	 	ip_tags[i]= gtk_text_buffer_create_tag( buffer,
-												0,
-												"background",
-												"#000040",
-												NULL
-												);
+	 	ip_tags[i]= gtk_text_buffer_create_tag( buffer,	0, "background", "#000040",	NULL );
 
-	
-		GtkTextTag* tag = gtk_text_buffer_create_tag( buffer,
-                                        				"highlight",
-														"foreground",
-														"#4080ff",
-														NULL
-													);
-
-		//g_object_set(GTK_TEXT_TAG(tag1), "background-set",TRUE, "background-rgba",&color, NULL);
-		
-		
-
-		GtkTextIter start_iter ;
-		gtk_text_buffer_get_start_iter(buffer,&start_iter);
-		
-	
-		gtk_text_buffer_insert_with_tags (
-						buffer,
-						&start_iter,
-						"bla",
-						3,
-						tag,
-						NULL
-						);
-
-		gtk_widget_set_size_request(scrollpanes[i], 0, 400);
+		gtk_widget_set_size_request(scrollpanes[i], 0, 220);
 		gtk_widget_set_hexpand(scrollpanes[i],1);
 		gtk_widget_set_vexpand(scrollpanes[i],1);
 		
+		
 		gtk_grid_attach(GTK_GRID(grid_down), frames[i], i,  0, 1, 1);
+		
+		varlist[i] = gtk_grid_new ();
+		{
+			GtkWidget* label= gtk_label_new(" image:");
+			show_regs_widgets[0][i] = gtk_spin_button_new_with_range(-0x8000,0x7fff,1);
+			g_signal_connect(G_OBJECT(show_regs_widgets[0][i]), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)(registers+0xffff-8*0-i));
+			gtk_label_set_xalign (GTK_LABEL(label), 0);
+			gtk_grid_attach(GTK_GRID(varlist[i]), label  , 0, 0, 1, 1);
+			gtk_grid_attach(GTK_GRID(varlist[i]), show_regs_widgets[0][i], 1, 0, 1, 1);
+		}
+		{
+			GtkWidget* label= gtk_label_new(" posx:");
+			show_regs_widgets[1][i] = gtk_spin_button_new_with_range(-0x8000,0x7fff,1);
+			g_signal_connect(G_OBJECT(show_regs_widgets[1][i]), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)(registers+0xffff-8*1-i));
+			gtk_label_set_xalign (GTK_LABEL(label), 0);
+			gtk_grid_attach(GTK_GRID(varlist[i]), label  , 0, 1, 1, 1);
+			gtk_grid_attach(GTK_GRID(varlist[i]), show_regs_widgets[1][i], 1, 1, 1, 1);
+		}
+		{
+			GtkWidget* label= gtk_label_new(" posy:");
+			show_regs_widgets[2][i] = gtk_spin_button_new_with_range(-0x8000,0x7fff,1);
+			g_signal_connect(G_OBJECT(show_regs_widgets[2][i]), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)(registers+0xffff-8*2-i));
+			gtk_label_set_xalign (GTK_LABEL(label), 0);
+			gtk_grid_attach(GTK_GRID(varlist[i]), label  , 0, 2, 1, 1);
+			gtk_grid_attach(GTK_GRID(varlist[i]), show_regs_widgets[2][i], 1, 2, 1, 1);
+		}
+		{
+			GtkWidget* label= gtk_label_new(" width:");
+			show_regs_widgets[3][i] = gtk_spin_button_new_with_range(-0x8000,0x7fff,1);
+			g_signal_connect(G_OBJECT(show_regs_widgets[3][i]), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)(registers+0xffff-8*3-i));
+			gtk_label_set_xalign (GTK_LABEL(label), 0);
+			gtk_grid_attach(GTK_GRID(varlist[i]), label  , 0, 3, 1, 1);
+			gtk_grid_attach(GTK_GRID(varlist[i]), show_regs_widgets[3][i], 1, 3, 1, 1);
+		}
+		{
+			GtkWidget* label= gtk_label_new(" height:");
+			show_regs_widgets[4][i] = gtk_spin_button_new_with_range(-0x8000,0x7fff,1);
+			g_signal_connect(G_OBJECT(show_regs_widgets[4][i]), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)(registers+0xffff-8*4-i));
+			gtk_label_set_xalign (GTK_LABEL(label), 0);
+			gtk_grid_attach(GTK_GRID(varlist[i]), label  , 0, 4, 1, 1);
+			gtk_grid_attach(GTK_GRID(varlist[i]), show_regs_widgets[4][i], 1, 4, 1, 1);
+		}
+		{
+			GtkWidget* label= gtk_label_new(" shiftx:");
+			show_regs_widgets[5][i] = gtk_spin_button_new_with_range(-0x8000,0x7fff,1);
+			g_signal_connect(G_OBJECT(show_regs_widgets[5][i]), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)(registers+0xffff-8*5-i));
+			gtk_label_set_xalign (GTK_LABEL(label), 0);
+			gtk_grid_attach(GTK_GRID(varlist[i]), label  , 0, 5, 1, 1);
+			gtk_grid_attach(GTK_GRID(varlist[i]), show_regs_widgets[5][i], 1, 5, 1, 1);
+		}
+		{
+			GtkWidget* label= gtk_label_new(" shifty:");
+			show_regs_widgets[6][i] = gtk_spin_button_new_with_range(-0x8000,0x7fff,1);
+			
+			g_signal_connect(G_OBJECT(show_regs_widgets[6][i]), "value_changed", 
+							G_CALLBACK(spinner_value_changed), (gpointer)(registers+0xffff-8*6-i));
+			
+			gtk_label_set_xalign (GTK_LABEL(label), 0);
+			gtk_grid_attach(GTK_GRID(varlist[i]), label  , 0, 6, 1, 1);
+			gtk_grid_attach(GTK_GRID(varlist[i]), show_regs_widgets[6][i], 1, 6, 1, 1);
+		}
+		gtk_grid_attach(GTK_GRID(grid_down), varlist[i], i,  1, 1, 1);
+		
 			
 	}
+	
 	gtk_grid_attach(GTK_GRID(cnt),grid_down,0,2,3,1);
 
 	
