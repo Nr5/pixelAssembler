@@ -1085,8 +1085,6 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 				
 		}
 
-			
-		
 		glGenTextures(1,&(layers[i].texture));
 		glBindTexture(GL_TEXTURE_RECTANGLE_ARB ,layers[i].texture);
 			
@@ -1254,15 +1252,10 @@ int main(int argc, char *argv[]) {
 
     bt1 = gtk_button_new_with_label("(>)");
 	bt2 = gtk_button_new_with_label("||");
-	bt3 = gtk_button_new_with_label("load");
-	bt4 = gtk_button_new_with_label("save");
-	bt5 = gtk_button_new_with_label("import images");
-	bt6 = gtk_button_new_with_label("export as gif");
 	
 	button_debug = gtk_button_new_with_label("debug");
 	button_step = gtk_button_new_with_label("step");
 
-	bt6 = gtk_button_new_with_label("export as gif");
 	label_width  = gtk_label_new("width:");
 	label_height = gtk_label_new("height:");
     label_framerate = gtk_label_new("fps:");
@@ -1271,7 +1264,6 @@ int main(int argc, char *argv[]) {
 	spinner_y = gtk_spin_button_new_with_range(0,65535,1);
 	spinner_framerate = gtk_spin_button_new_with_range(0,255,1);
 
-	gif_import_button = gtk_button_new_with_label("import gif");
 
 	
 	g_signal_connect(G_OBJECT(spinner_x), "value_changed", G_CALLBACK(spinner_value_changed), (gpointer)&width);
@@ -1283,10 +1275,6 @@ int main(int argc, char *argv[]) {
 	g_signal_connect(G_OBJECT(bt2), "clicked", 			G_CALLBACK(toggle_flag_func), (gpointer) paused  );
 	g_signal_connect(G_OBJECT(button_debug), "clicked", G_CALLBACK(toggle_flag_func), (gpointer) debug  );
 	g_signal_connect(G_OBJECT(button_step),  "clicked", G_CALLBACK(step_func), (gpointer) step  );
-	g_signal_connect(G_OBJECT(bt3), "clicked", G_CALLBACK(load_func), 0);
-	g_signal_connect(G_OBJECT(bt4), "clicked", G_CALLBACK(save_func), 0);
-	g_signal_connect(G_OBJECT(bt5), "clicked", G_CALLBACK(load_images_func), 0);
-	g_signal_connect(G_OBJECT(bt6), "clicked", G_CALLBACK(export_gif), 0);
 	
 	g_signal_connect(G_OBJECT(gif_import_button), "clicked", G_CALLBACK(import_gif),0 );
     
@@ -1335,27 +1323,21 @@ int main(int argc, char *argv[]) {
 	
   	gtk_grid_attach(GTK_GRID(grid_buttons), bt1,   0,  0, 1, 1);
 	gtk_grid_attach(GTK_GRID(grid_buttons), bt2,   1,  0, 1, 1);
-	gtk_grid_attach(GTK_GRID(grid_buttons), bt3,   0,  1, 1, 1);
-	gtk_grid_attach(GTK_GRID(grid_buttons), bt4,   0,  2, 1, 1);
-	gtk_grid_attach(GTK_GRID(grid_buttons), bt5,   1,  1, 1, 1);
-	gtk_grid_attach(GTK_GRID(grid_buttons), bt6,   1,  2, 1, 1);
 	
 	gtk_spin_button_set_value(GTK_SPIN_BUTTON(spinner_x),         width );
 	gtk_spin_button_set_value(GTK_SPIN_BUTTON(spinner_y),         height);
 	gtk_spin_button_set_value(GTK_SPIN_BUTTON(spinner_framerate), framerate);
   	
-	gtk_grid_attach(GTK_GRID(grid_buttons), label_width,    	0,  3, 1, 1);
-  	gtk_grid_attach(GTK_GRID(grid_buttons), spinner_x,      	1,  3, 1, 1);
-  	gtk_grid_attach(GTK_GRID(grid_buttons), label_height,   	0,  4, 1, 1);
-  	gtk_grid_attach(GTK_GRID(grid_buttons), spinner_y,      	1,  4, 1, 1);
+	gtk_grid_attach(GTK_GRID(grid_buttons), label_width,    	0,  1, 1, 1);
+  	gtk_grid_attach(GTK_GRID(grid_buttons), spinner_x,      	1,  1, 1, 1);
+  	gtk_grid_attach(GTK_GRID(grid_buttons), label_height,   	0,  2, 1, 1);
+  	gtk_grid_attach(GTK_GRID(grid_buttons), spinner_y,      	1,  2, 1, 1);
     
-  	gtk_grid_attach(GTK_GRID(grid_buttons), label_framerate,    0,  5, 1, 1);
-  	gtk_grid_attach(GTK_GRID(grid_buttons), spinner_framerate,  1,  5, 1, 1);
+  	gtk_grid_attach(GTK_GRID(grid_buttons), label_framerate,    0,  3, 1, 1);
+  	gtk_grid_attach(GTK_GRID(grid_buttons), spinner_framerate,  1,  3, 1, 1);
 
-  	gtk_grid_attach(GTK_GRID(grid_buttons), gif_import_button,    0,  6, 1, 1);
-
-  	gtk_grid_attach(GTK_GRID(grid_buttons), button_debug ,   0,  7, 1, 1);
-	gtk_grid_attach(GTK_GRID(grid_buttons), button_step  ,   1,  7, 1, 1);
+  	gtk_grid_attach(GTK_GRID(grid_buttons), button_debug ,   0,  4, 1, 1);
+	gtk_grid_attach(GTK_GRID(grid_buttons), button_step  ,   1,  4, 1, 1);
 
 	gtk_grid_attach(GTK_GRID(cnt), grid_buttons,   2,  1, 1, 1);
 	GtkWidget* frames[8];
@@ -1444,7 +1426,6 @@ int main(int argc, char *argv[]) {
 			gtk_grid_attach(GTK_GRID(varlist[i]), show_regs_widgets[6][i], 1, 6, 1, 1);
 		}
 		gtk_grid_attach(GTK_GRID(grid_down), varlist[i], i,  1, 1, 1);
-		
 			
 	}
 	
@@ -1460,13 +1441,49 @@ int main(int argc, char *argv[]) {
     
 	gtk_grid_attach(GTK_GRID(cnt), scrollpanes[8],   1,  0, 1, 2);
  	
-	//gtk_container_add(GTK_CONTAINER(win),GTK_CONTAINER(menubar) );
-    gtk_container_add(GTK_CONTAINER(win), cnt);
-    gtk_widget_set_size_request(gl, 1024, 512);
+	menubar = gtk_menu_bar_new();
+
+	GtkWidget* menuitem0 = gtk_menu_item_new_with_label("file") ;
+	GtkWidget* vbox 	 = gtk_vbox_new(0,2);
+	
+	GtkWidget* submenu   = gtk_menu_new();
+
+	bt3 = gtk_menu_item_new_with_label("load");
+	bt4 = gtk_menu_item_new_with_label("save");
+	bt5 = gtk_menu_item_new_with_label("import images");
+	bt6 = gtk_menu_item_new_with_label("export as gif");
+	gif_import_button = gtk_menu_item_new_with_label("import gif");
+
+
+	gtk_menu_shell_append(GTK_MENU(submenu), bt3 );
+	gtk_menu_shell_append(GTK_MENU(submenu), bt4 );
+	gtk_menu_shell_append(GTK_MENU(submenu), bt5 );
+	gtk_menu_shell_append(GTK_MENU(submenu), bt6 );
+	gtk_menu_shell_append(GTK_MENU(submenu), gif_import_button );
+
+	g_signal_connect(G_OBJECT(bt3), "activate", G_CALLBACK(load_func), 0);
+	g_signal_connect(G_OBJECT(bt4), "activate", G_CALLBACK(save_func), 0);
+	g_signal_connect(G_OBJECT(bt5), "activate", G_CALLBACK(load_images_func), 0);
+	g_signal_connect(G_OBJECT(bt6), "activate", G_CALLBACK(export_gif), 0);
+	g_signal_connect(G_OBJECT(gif_import_button), "activate", G_CALLBACK(import_gif), 0);
+	
+	gtk_menu_item_set_submenu(GTK_MENU_ITEM(menuitem0), submenu );
+
+
+	gtk_container_add(GTK_CONTAINER(menubar), menuitem0 );
+	
+	gtk_container_add(GTK_CONTAINER(vbox),menubar );
+    gtk_container_add(GTK_CONTAINER(vbox), cnt );
+	
+    gtk_container_add(GTK_CONTAINER(win), vbox );
+	
+	gtk_widget_set_size_request(gl, 1024, 512);
     
-	gtk_window_set_icon_from_file(GTK_WINDOW(win), "../res/icon.bmp", 0);	
+	strcpy(path_from_res,"icon.bmp" );
+	gtk_window_set_icon_from_file(GTK_WINDOW(win), path_to_res, 0);	
 								//this won't work unless called with the right current path
 	
+	*path_from_res = 0;
 	
 	gtk_widget_show_all(win);	
 	
