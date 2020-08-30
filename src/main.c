@@ -692,6 +692,7 @@ gboolean draw_the_gl(gpointer ud) {
 	// Logic	
 		uint8_t wait=1;	
 		for (uint8_t i=0;i<n_layers;i++){
+			
 			glBindTexture(GL_TEXTURE_RECTANGLE_ARB ,layers[i].texture);
 			while( !(layers[i].wait)  && (layers[i].instr_p < layers[i].n_instr) ){
 				
@@ -707,8 +708,7 @@ gboolean draw_the_gl(gpointer ud) {
 				prev_ips[i]=layers[i].instr_p;
 				
 				instruction instr=layers[i].instr[prev_ips[i]];
-		/*		
-				printf("l%i %3i %s	%s%i	%s%i	",
+				/*printf("l%i %3i %s	%s%i	%s%i	",
 						i,
 						layers[i].instr_p,
 						
@@ -736,8 +736,7 @@ gboolean draw_the_gl(gpointer ud) {
 					printf("($%i = %i)", instr.arg2, registers[(uint16_t) instr.arg2]);
 				}
 				printf("\n");
-		*/		
-				
+				*/
 				gtk_text_buffer_get_iter_at_line(buffer,&start_iter,lines_of_ips[prev_ips[i]][i] );
 				gtk_text_buffer_get_iter_at_line(buffer,&end_iter,lines_of_ips[prev_ips[i]][i] +1);
 				
@@ -772,6 +771,7 @@ gboolean draw_the_gl(gpointer ud) {
 		}
 	// Render
 		for (uint8_t i=0;i<n_layers;i++){
+			
 			glBindTexture(GL_TEXTURE_RECTANGLE_ARB ,layers[i].texture);
 		 	px_image* image = images + registers[0xffff-i];
 				
@@ -897,7 +897,7 @@ static void refresh(GtkWidget *bt, gpointer ud) {
 	memset(registers, 0, 0x010000*2);	
 
 	for (uint8_t i =0;i<8;i++){
-		
+		layers[i].wait=0;	
 		VarMapPair vmp1 = {
 			"img",
 			0xffff-8*0-i
