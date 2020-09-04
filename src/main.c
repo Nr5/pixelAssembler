@@ -97,11 +97,16 @@ static void load_images_func_helper(const char* name,gpointer _){
 			
 	char* tmpname = strstr(name,".");
 	tmpname[0]    = 0;
-	VarMapPair vmp={name,n_images};
+	
+	char* vmp_key = malloc(strlen(name)+1); // TODO free memory
+	memcpy(vmp_key,name,strlen(name)+1);
+	tmpname[0]='.';
+
+	VarMapPair vmp={vmp_key,n_images};
 		
 	var_map[var_map_size++]=vmp;
 	
-	uint8_t* pixelarray = malloc(img->w * img->h);
+	uint8_t* pixelarray = malloc(img->w * img->h); // TODO free memory
 	memcpy(pixelarray, img->pixels, img->w * img->h);
 
 	images[n_images] = (px_image) {
@@ -168,13 +173,16 @@ static void load_func(GtkWidget *bt, gpointer ud){
 	gtk_file_filter_set_name (filter,".pxa files ");
 	gtk_file_chooser_add_filter (chooser, filter);
 	
+	printf("-2\n");
 	res = gtk_dialog_run (GTK_DIALOG (dialog));
 	if (res == GTK_RESPONSE_ACCEPT)  	{
     	const char*  filename = gtk_file_chooser_get_filename (chooser);
     	uint16_t header[8];
 		FILE* fp = fopen(filename,"r");
-	
+			
+		printf("-1\n");
 		fread(header,2,8,fp);
+		printf("0\n");
 	
 		for (uint8_t i=0;i<8;i++){
 	
@@ -188,6 +196,7 @@ static void load_func(GtkWidget *bt, gpointer ud){
 			free (strbuf);
 		}
 //  TODO the end of this function is really messy tidy up
+		printf("1\n");
 		name_buf2[0]=0;
 		fread (&n_images, 1,1,fp);
 		fread (&image_name_buffer_length,2,1,fp);
@@ -195,15 +204,37 @@ static void load_func(GtkWidget *bt, gpointer ud){
 
 		char* buf_end = name_buf2 + image_name_buffer_length;
 
-
+printf("2\n");
 	
 		image_name_buffer_length = 0;
 		n_images=0;
-		for (char* name = name_buf2; name < buf_end; name += strlen(name) + 1 + 4 ){  
-	// NOTE the +4 is needed to skip over the suffix (bmp)	because load_images_helper_func splits it off
-	// will cause problems on suffixes longer than 3 characters
-			load_images_func_helper(name,0);
+		
+
+		for (char* name = name_buf2; name < buf_end; name += strlen(name) + 1 ){  
+// NOTE the +4 is needed to skip over the suffix (bmp)	because load_images_helper_func splits it off
+// will cause problems on suffixes longer than 3 characters
+			char* filename_end = filename + strlen(filename);
+			for (; *filename_end != '/'; filename_end --);		
+			filename_end--;	
+			for(name = name; *name == '.'; name+=3){
+				for (; *filename_end != '/'; filename_end --);		
+				filename_end --;
+			}
 			
+			//filename_end[2]=0;
+			//char strbuf[128];
+			
+
+
+			memcpy(image_name_buffer + image_name_buffer_length, filename, (filename_end-filename) + 2);
+			memcpy(image_name_buffer + image_name_buffer_length + (filename_end-filename) + 2 , name, strlen(name) + 1);
+			
+			printf("imgbuf: _ _ %s\n",image_name_buffer + image_name_buffer_length);	
+			load_images_func_helper(image_name_buffer + image_name_buffer_length,0);
+			//image_name_buffer[image_name_buffer_length -5] = '.';
+			printf("imgbuf:  _  %s\n",image_name_buffer + image_name_buffer_length -53);	
+			//image_name_buffer_length += filename_end-filename + 2 + strlen(name) + 1; 
+
 		}
 // TODO this code is a copy from load_images_func() 
 // probably needs some refactoring
@@ -331,9 +362,8 @@ static void save_func(GtkWidget *bt, gpointer ud){
                                       GTK_RESPONSE_ACCEPT,
                                       NULL);
 
-	
 	GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
-			
+
 	gtk_file_chooser_set_current_folder (chooser, path_to_res);
 
 	GtkFileFilter * filter =gtk_file_filter_new ();
@@ -360,6 +390,7 @@ static void save_func(GtkWidget *bt, gpointer ud){
 			fwrite(header,2,8,fp);
 			
 			for (uint8_t i=0;i<8;i++){
+				
 				GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textViews[i]));
 				
 				GtkTextIter start_iter;
@@ -371,13 +402,68 @@ static void save_func(GtkWidget *bt, gpointer ud){
 				fputs (text,fp);
 			}
 			
-			
-
 			fwrite(&n_images,1,1,fp );
-			fwrite(&image_name_buffer_length,2,1,fp );
-			fwrite(&image_name_buffer,1,image_name_buffer_length,fp );
 			
-
+			//fwrite(&image_name_buffer_length,2,1,fp );
+			
+			char* tmp_img_name_buffer = image_name_buffer;
+			char* filename_end = filename + strlen (filename);
+			
+			char* img_name_buffer_save = malloc(65536); //TODO please make this dynamic maybe
+			image_name_buffer_length=0;
+			
+			for (int i = 0; i < n_images; i++){
+				
+				char* img_name_end = tmp_img_name_buffer + strlen (tmp_img_name_buffer);
+				//printf("filename: %s\n", filename);
+				//printf("img_name: %s\n", tmp_img_name_buffer);	
+				char* token1 = strtok(tmp_img_name_buffer, "/");
+				char* token2 = strtok(filename, "/");
+  				char* last_token1;
+			    char* last_token2;	
+				
+				
+				while ( token1 && token2 ) {
+					last_token1 = token1;
+					last_token2 = token2;
+					//printf("__  %s, %s\n",token1,token2);
+					
+					tmp_img_name_buffer += strlen(token1) + 1;
+					
+					if (token2 > filename && token2 < filename_end) token2[-1] = '/';
+					
+					token1 = strtok(token1 + strlen( token1 ) + 1, "/");
+					token2 = strtok(token2 + strlen( token2 ) + 1, "/");
+					if (token1 && token2 && strcmp(token1,token2)){
+						token2 = strtok(0,"/");
+						while(token2){
+							token2[-1]='/';
+							token2=strtok(0,"/");
+							sprintf(img_name_buffer_save + image_name_buffer_length, "../");
+							image_name_buffer_length+=3;
+						}
+						
+						if (token1 + strlen(token1) < img_name_end ){
+							token1[strlen(token1)] = '/';
+						}
+						sprintf(img_name_buffer_save + image_name_buffer_length, "%s", token1);
+						printf("%s\n", img_name_buffer_save + image_name_buffer_length);
+						image_name_buffer_length += strlen(token1) + 1;
+						//fwrite(token1,1,strlen(token1)+1,fp );
+						tmp_img_name_buffer += strlen(token1) + 1;
+						filename[strlen(filename)] = '/';
+						break;
+					}
+					
+				}
+				if (i < n_images -1){	
+					tmp_img_name_buffer = token1 + strlen(token1) + 1;
+				}
+			}
+			fwrite(&image_name_buffer_length,2,1,fp );
+			printf("buflen: %i\n", image_name_buffer_length);
+			
+			fwrite(img_name_buffer_save,1,image_name_buffer_length,fp );
 			
 			fclose(fp);	
 			
@@ -1276,7 +1362,6 @@ int main(int argc, char *argv[]) {
 	g_signal_connect(G_OBJECT(button_debug), "clicked", G_CALLBACK(toggle_flag_func), (gpointer) debug  );
 	g_signal_connect(G_OBJECT(button_step),  "clicked", G_CALLBACK(step_func), (gpointer) step  );
 	
-	g_signal_connect(G_OBJECT(gif_import_button), "clicked", G_CALLBACK(import_gif),0 );
     
 	// set a callback that will stop the timer from drawing
     g_signal_connect(G_OBJECT(gl), "destroy", G_CALLBACK(destroy_the_gl), 0);
@@ -1486,6 +1571,7 @@ int main(int argc, char *argv[]) {
 	*path_from_res = 0;
 	
 	gtk_widget_show_all(win);	
+	
 	
 	
     te_gtkgl_make_current(TE_GTKGL(gl));
