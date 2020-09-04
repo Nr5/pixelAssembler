@@ -118,7 +118,7 @@ static void load_images_func_helper(const char* name,gpointer _){
 	memcpy(images[n_images++].palette, img->format->palette->colors, img->format->palette->ncolors*4);
 
 		
-	GtkWidget* label= gtk_label_new(name);
+	GtkWidget* label= gtk_label_new(vmp_key);
 	gtk_label_set_xalign (GTK_LABEL(label), 0);
 	gtk_container_add(GTK_CONTAINER(imglist_widget), label);
 	//tmpname[0]=".";
@@ -173,16 +173,13 @@ static void load_func(GtkWidget *bt, gpointer ud){
 	gtk_file_filter_set_name (filter,".pxa files ");
 	gtk_file_chooser_add_filter (chooser, filter);
 	
-	printf("-2\n");
 	res = gtk_dialog_run (GTK_DIALOG (dialog));
 	if (res == GTK_RESPONSE_ACCEPT)  	{
     	const char*  filename = gtk_file_chooser_get_filename (chooser);
     	uint16_t header[8];
 		FILE* fp = fopen(filename,"r");
 			
-		printf("-1\n");
 		fread(header,2,8,fp);
-		printf("0\n");
 	
 		for (uint8_t i=0;i<8;i++){
 	
@@ -196,7 +193,6 @@ static void load_func(GtkWidget *bt, gpointer ud){
 			free (strbuf);
 		}
 //  TODO the end of this function is really messy tidy up
-		printf("1\n");
 		name_buf2[0]=0;
 		fread (&n_images, 1,1,fp);
 		fread (&image_name_buffer_length,2,1,fp);
@@ -204,7 +200,6 @@ static void load_func(GtkWidget *bt, gpointer ud){
 
 		char* buf_end = name_buf2 + image_name_buffer_length;
 
-printf("2\n");
 	
 		image_name_buffer_length = 0;
 		n_images=0;
@@ -229,11 +224,7 @@ printf("2\n");
 			memcpy(image_name_buffer + image_name_buffer_length, filename, (filename_end-filename) + 2);
 			memcpy(image_name_buffer + image_name_buffer_length + (filename_end-filename) + 2 , name, strlen(name) + 1);
 			
-			printf("imgbuf: _ _ %s\n",image_name_buffer + image_name_buffer_length);	
 			load_images_func_helper(image_name_buffer + image_name_buffer_length,0);
-			//image_name_buffer[image_name_buffer_length -5] = '.';
-			printf("imgbuf:  _  %s\n",image_name_buffer + image_name_buffer_length -53);	
-			//image_name_buffer_length += filename_end-filename + 2 + strlen(name) + 1; 
 
 		}
 // TODO this code is a copy from load_images_func() 
@@ -415,8 +406,6 @@ static void save_func(GtkWidget *bt, gpointer ud){
 			for (int i = 0; i < n_images; i++){
 				
 				char* img_name_end = tmp_img_name_buffer + strlen (tmp_img_name_buffer);
-				//printf("filename: %s\n", filename);
-				//printf("img_name: %s\n", tmp_img_name_buffer);	
 				char* token1 = strtok(tmp_img_name_buffer, "/");
 				char* token2 = strtok(filename, "/");
   				char* last_token1;
@@ -426,7 +415,6 @@ static void save_func(GtkWidget *bt, gpointer ud){
 				while ( token1 && token2 ) {
 					last_token1 = token1;
 					last_token2 = token2;
-					//printf("__  %s, %s\n",token1,token2);
 					
 					tmp_img_name_buffer += strlen(token1) + 1;
 					
@@ -447,7 +435,6 @@ static void save_func(GtkWidget *bt, gpointer ud){
 							token1[strlen(token1)] = '/';
 						}
 						sprintf(img_name_buffer_save + image_name_buffer_length, "%s", token1);
-						printf("%s\n", img_name_buffer_save + image_name_buffer_length);
 						image_name_buffer_length += strlen(token1) + 1;
 						//fwrite(token1,1,strlen(token1)+1,fp );
 						tmp_img_name_buffer += strlen(token1) + 1;
@@ -461,7 +448,6 @@ static void save_func(GtkWidget *bt, gpointer ud){
 				}
 			}
 			fwrite(&image_name_buffer_length,2,1,fp );
-			printf("buflen: %i\n", image_name_buffer_length);
 			
 			fwrite(img_name_buffer_save,1,image_name_buffer_length,fp );
 			
@@ -591,12 +577,11 @@ static void import_gif( GtkWidget *bt, gpointer ud ) {
 
 	sprintf(strbuf,
 ".l0\n\
-set 0 %s0\n\
+set img %s0\n\
 .l1\n\
-img $0\n\
 drw 1\n\
-cmp $0 %s\n\
-add 0 1\n\
+cmp $img %s\n\
+add img 1\n\
 jlt .l1\n\
 jmp .l0\n"
 		,name
